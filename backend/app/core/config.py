@@ -28,7 +28,7 @@ class Settings(BaseSettings):
             "http://localhost:4173",
             "http://localhost:8080",
         ]
-    )
+    ) # Esto es por si corren el front en otro puerto xd
 
     ollama_enabled: bool = False
     ollama_base_url: str = "http://host.docker.internal:11434"

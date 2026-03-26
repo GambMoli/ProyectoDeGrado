@@ -287,45 +287,13 @@ class PracticeService:
         request_text: str,
         reference: KnowledgeSearchResult | None,
     ) -> PracticeTemplate:
-        if reference and self.ollama_client:
-            try:
-                return self._build_llm_grounded_template(
-                    request_text=request_text,
-                    reference=reference,
-                )
-            except OllamaClientError as exc:
-                logger.warning("Falling back to conceptual practice template: %s", exc)
-            except (ValueError, json.JSONDecodeError) as exc:
-                logger.warning("Invalid practice JSON from Ollama, using fallback template: %s", exc)
+        if not self.ollama_client:
+            raise RuntimeError("OllamaClient no esta configurado.")
 
         if reference:
-            document = reference.document
-            keywords = sorted(
-                {
-                    *document.tags,
-                    *tokenize(document.topic),
-                    *tokenize(document.subtopic),
-                    *tokenize(document.text)[:6],
-                }
-            )
-            title = document.title
-            return PracticeTemplate(
-                topic=document.topic,
-                problem_type=document.topic,
-                grading_mode="keyword_rubric",
-                exercise_text=(
-                    f"Vamos con una practica corta sobre {title}. "
-                    f"Explica con tus palabras cual es la idea central de {title} "
-                    "y menciona al menos una condicion, paso clave o criterio importante para aplicarlo bien."
-                ),
-                hint="Piensa en la intuicion principal del metodo y en que detalle tecnico evita cometer errores.",
-                expected_answer=document.text,
-                rubric=(
-                    f"La respuesta debe reflejar la idea central de {title} "
-                    "y mencionar al menos un criterio, paso o condicion de uso."
-                ),
-                reference_summary=document.text,
-                keywords=keywords,
+            return self._build_llm_grounded_template(
+                request_text=request_text,
+                reference=reference,
             )
 
         return PracticeTemplate(
@@ -427,9 +395,10 @@ Devuelve solo JSON valido con esta forma:
         hint: str,
         attempts: int,
     ) -> str:
-        if self.ollama_client:
-            try:
-                prompt = f"""
+        if not self.ollama_client:
+            raise RuntimeError("OllamaClient no esta configurado.")
+
+        prompt = f"""
 Ejercicio propuesto:
 {exercise_text}
 
@@ -452,23 +421,10 @@ Redacta una devolucion breve, natural y pedagogica.
 - Si ya van varios intentos, puedes ser un poco mas explicito.
 - No uses markdown decorativo.
 """.strip()
-                return self.ollama_client.generate(
-                    system_prompt="Eres un tutor matematico cercano y preciso.",
-                    prompt=prompt,
-                ).strip()
-            except OllamaClientError as exc:
-                logger.warning("Falling back to template incorrect feedback: %s", exc)
-
-        if attempts >= 2:
-            return (
-                f"No coincide todavia. La respuesta esperada es {expected_answer}. "
-                "Si quieres, ahora te explico como llegar a ella paso a paso."
-            )
-        return (
-            "Vas cerca, pero esa respuesta no coincide con lo esperado. "
-            f"Revisa esta idea: {hint} "
-            "Si quieres, intenta una vez mas y luego lo resolvemos juntos."
-        )
+        return self.ollama_client.generate(
+            system_prompt="Eres un tutor matematico cercano y preciso.",
+            prompt=prompt,
+        ).strip()
 
     @staticmethod
     def _extract_student_answer(message: str) -> str:
@@ -532,9 +488,10 @@ Redacta una devolucion breve, natural y pedagogica.
         student_answer: str,
         attempts: int,
     ) -> PracticeGradeResult:
-        if self.ollama_client:
-            try:
-                prompt = f"""
+        if not self.ollama_client:
+            raise RuntimeError("OllamaClient no esta configurado.")
+
+        prompt = f"""
 Ejercicio:
 {pending_practice.get("exercise_text", "")}
 
@@ -558,33 +515,27 @@ Evalua si la respuesta es suficientemente correcta para este nivel.
 Devuelve solo JSON valido:
 {{"is_correct": true, "feedback": "..."}}
 """.strip()
-                raw = self.ollama_client.generate(
-                    system_prompt="Eres un evaluador interno de practica matematica. Devuelves solo JSON valido.",
-                    prompt=prompt,
-                )
-                payload = self._extract_json(raw)
-                is_correct = bool(payload.get("is_correct"))
-                feedback = str(payload.get("feedback", "")).strip()
-                if feedback:
-                    next_state = {} if is_correct else {
-                        "pending_practice": {
-                            **pending_practice,
-                            "attempts": attempts,
-                        }
-                    }
-                    return PracticeGradeResult(
-                        text=feedback,
-                        is_correct=is_correct,
-                        next_state=next_state,
-                    )
-            except (OllamaClientError, ValueError, json.JSONDecodeError) as exc:
-                logger.warning("Falling back to keyword practice grading: %s", exc)
-
-        return self._grade_with_keywords(
-            pending_practice=pending_practice,
-            student_answer=student_answer,
-            attempts=attempts,
+        raw = self.ollama_client.generate(
+            system_prompt="Eres un evaluador interno de practica matematica. Devuelves solo JSON valido.",
+            prompt=prompt,
         )
+        payload = self._extract_json(raw)
+        is_correct = bool(payload.get("is_correct"))
+        feedback = str(payload.get("feedback", "")).strip()
+        if feedback:
+            next_state = {} if is_correct else {
+                "pending_practice": {
+                    **pending_practice,
+                    "attempts": attempts,
+                }
+            }
+            return PracticeGradeResult(
+                text=feedback,
+                is_correct=is_correct,
+                next_state=next_state,
+            )
+        
+        raise ValueError("El evaluador interno no devolvio un feedback valido.")
 
     def _grade_with_keywords(
         self,

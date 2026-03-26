@@ -45,15 +45,14 @@ class TopicExplanationService:
         self.rag_system_prompt = (
             "Eres un tutor academico de calculo y metodos numericos. "
             "REGLAS QUE DEBES SEGUIR SIEMPRE: "
-            "1. Responde UNICAMENTE sobre el tema especifico que menciona el estudiante en su ultimo mensaje. "
+            "1. Responde SOLO sobre el tema especifico que menciona el estudiante en su ultimo mensaje. "
             "2. Estructura tu respuesta asi: primero la idea principal en 1-2 oraciones claras, "
             "luego desarrolla brevemente con un ejemplo concreto si aplica. "
             "3. Se conciso: maximo 150 palabras por respuesta, salvo que el tema sea genuinamente complejo. "
             "4. Al final, haz UNA sola pregunta corta para verificar que el estudiante entendio. "
             "5. Usa la informacion del corpus como base principal. No inventes teoria fuera de ese contexto. "
             "6. No uses encabezados rigidos, asteriscos dobles, markdown decorativo ni tono de plantilla. "
-            "7. NUNCA respondas a las preguntas que tú mismo hiciste en el historial. Si el estudiante cambia de tema, suelta el tema anterior de inmediato y habla solo de lo nuevo. "
-            "8. Si la pregunta no es clara, pide UNA aclaracion corta antes de responder."
+            "7. Si la pregunta no es clara, pide UNA aclaracion corta antes de responder."
         )
         self.open_math_system_prompt = (
             "Eres un tutor academico de calculo y metodos numericos. "
@@ -88,49 +87,32 @@ class TopicExplanationService:
             limit=self.settings.rag_top_k,
         )
 
-        if self.ollama_client:
-            try:
-                if references:
-                    prompt = self._build_rag_prompt(
-                        question=question,
-                        references=references,
-                        conversation_context=conversation_context or [],
-                    )
-                    system_prompt = self.rag_system_prompt
-                    source = "ollama_rag"
-                else:
-                    prompt = self._build_open_math_prompt(
-                        question=question,
-                        conversation_context=conversation_context or [],
-                    )
-                    system_prompt = self.open_math_system_prompt
-                    source = "ollama_math_chat"
-                text = self.ollama_client.generate(
-                    system_prompt=system_prompt,
-                    prompt=prompt,
-                )
-                return TopicExplanationResult(
-                    text=self._normalize_llm_text(text),
-                    source=source,
-                    references=references,
-                )
-            except OllamaClientError as exc:
-                logger.warning("Falling back to template topic explanation: %s", exc)
+        if not self.ollama_client:
+            raise RuntimeError("OllamaClient no esta configurado.")
 
-        if not references:
-            return TopicExplanationResult(
-                text=(
-                    "Puedo ayudarte con calculo 1, calculo 2 y metodos numericos. "
-                    "Haz una pregunta teorica, comparte un ejercicio o indica el tema que quieres repasar. "
-                    "Si quieres resolver algo concreto, escribe la expresion completa o describe el metodo que te genera duda."
-                ),
-                source="math_scope_fallback",
-                references=[],
+        if references:
+            prompt = self._build_rag_prompt(
+                question=question,
+                references=references,
+                conversation_context=conversation_context or [],
             )
-
+            system_prompt = self.rag_system_prompt
+            source = "ollama_rag"
+        else:
+            prompt = self._build_open_math_prompt(
+                question=question,
+                conversation_context=conversation_context or [],
+            )
+            system_prompt = self.open_math_system_prompt
+            source = "ollama_math_chat"
+            
+        text = self.ollama_client.generate(
+            system_prompt=system_prompt,
+            prompt=prompt,
+        )
         return TopicExplanationResult(
-            text=self._build_template_answer(question=question, references=references),
-            source="knowledge_template",
+            text=self._normalize_llm_text(text),
+            source=source,
             references=references,
         )
 
@@ -144,36 +126,32 @@ class TopicExplanationService:
         course_documents = self.knowledge_base_service.get_course_documents(course)
         outline = self.knowledge_base_service.get_course_outline(course)
 
-        if self.ollama_client and outline:
-            try:
-                prompt = self._build_course_overview_prompt(
-                    question=question,
-                    course=course,
-                    outline=outline,
-                    conversation_context=conversation_context,
-                )
-                text = self.ollama_client.generate(
-                    system_prompt=self.rag_system_prompt,
-                    prompt=prompt,
-                )
-                return TopicExplanationResult(
-                    text=self._normalize_llm_text(text),
-                    source="ollama_course_overview",
-                    references=[
-                        KnowledgeSearchResult(
-                            document=document,
-                            score=1.0,
-                            matched_terms=[],
-                        )
-                        for document in course_documents[: self.settings.rag_top_k]
-                    ],
-                )
-            except OllamaClientError as exc:
-                logger.warning("Falling back to course overview template: %s", exc)
+        if not self.ollama_client:
+            raise RuntimeError("OllamaClient no esta configurado.")
+            
+        if not outline:
+            return TopicExplanationResult(
+                text=(
+                    f"Puedo ayudarte con {course.replace('_', ' ')}, "
+                    "pero todavia no tengo un esquema suficiente cargado para resumirlo bien."
+                ),
+                source="course_outline_fallback",
+                references=[],
+            )
 
+        prompt = self._build_course_overview_prompt(
+            question=question,
+            course=course,
+            outline=outline,
+            conversation_context=conversation_context,
+        )
+        text = self.ollama_client.generate(
+            system_prompt=self.rag_system_prompt,
+            prompt=prompt,
+        )
         return TopicExplanationResult(
-            text=self._build_course_overview_template(course=course, outline=outline),
-            source="course_outline_template",
+            text=self._normalize_llm_text(text),
+            source="ollama_course_overview",
             references=[
                 KnowledgeSearchResult(
                     document=document,

@@ -1,1 +1,1 @@
-"""Core settings and logging utilities."""
+"""Core settings and logging utilities :v."""

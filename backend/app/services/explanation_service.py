@@ -36,23 +36,17 @@ class ExplanationService:
         parsed: ParsedExercise,
         solved: SolvedExerciseData,
     ) -> GeneratedExplanation:
-        if self.ollama_client:
-            try:
-                prompt = self._build_prompt(parsed=parsed, solved=solved)
-                text = self.ollama_client.generate(
-                    system_prompt=self.system_prompt,
-                    prompt=prompt,
-                )
-                return GeneratedExplanation(
-                    text=self._normalize_llm_text(text),
-                    source="ollama",
-                )
-            except OllamaClientError as exc:
-                logger.warning("Falling back to template explanation: %s", exc)
+        if not self.ollama_client:
+            raise RuntimeError("OllamaClient no esta configurado.")
 
+        prompt = self._build_prompt(parsed=parsed, solved=solved)
+        text = self.ollama_client.generate(
+            system_prompt=self.system_prompt,
+            prompt=prompt,
+        )
         return GeneratedExplanation(
-            text=self._build_template_explanation(parsed=parsed, solved=solved),
-            source="template",
+            text=self._normalize_llm_text(text),
+            source="ollama",
         )
 
     @staticmethod
