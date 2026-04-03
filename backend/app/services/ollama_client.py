@@ -33,6 +33,7 @@ class OllamaClient:
                         "system": system_prompt,
                         "prompt": prompt,
                         "stream": False,
+                        "think": False,
                         "options": {"temperature": temperature},
                     },
                 )
