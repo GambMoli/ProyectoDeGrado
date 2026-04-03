@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from sympy import Symbol, exp, series, simplify
+from sympy import Symbol, series, simplify
 from sympy.parsing.sympy_parser import (
     convert_xor,
     implicit_multiplication_application,
@@ -35,6 +35,10 @@ logger = logging.getLogger(__name__)
 class PracticeGenerationResult:
     text: str
     state: dict
+    exercise_text: str
+    hint: str
+    topic: str
+    problem_type: str
 
 
 @dataclass(slots=True)
@@ -68,29 +72,62 @@ class PracticeService:
         "otro",
         "otra",
         "uno mas",
-        "uno más",
         "mas dificil",
-        "más dificil",
         "mas retador",
-        "más retador",
         "otra vez",
     )
     _topic_aliases = (
         ("serie_de_taylor", ("serie de taylor", "taylor")),
         ("newton_raphson", ("newton raphson", "newton-raphson")),
-        ("regula_falsi", ("regula falsi", "falsa posicion", "falsa posición")),
-        ("metodo_de_la_secante", ("metodo de la secante", "método de la secante", "secante")),
+        ("regula_falsi", ("regula falsi", "falsa posicion")),
+        ("metodo_de_la_secante", ("metodo de la secante", "secante")),
         ("punto_fijo", ("punto fijo",)),
-        ("biseccion", ("biseccion", "bisección")),
+        ("biseccion", ("biseccion",)),
         ("lagrange", ("lagrange",)),
-        ("interpolacion_newton", ("interpolacion de newton", "interpolación de newton")),
+        ("interpolacion_newton", ("interpolacion de newton",)),
         ("simpson_1_3", ("simpson 1/3", "simpson 1 3", "simpson un tercio")),
         ("trapecios", ("trapecio", "trapecios")),
         ("derivative", ("derivada", "derivadas", "derivar")),
         ("integral", ("integral", "integrales", "integrar")),
-        ("limit", ("limite", "límite", "limites", "límites")),
-        ("equation", ("ecuacion", "ecuación", "ecuaciones")),
+        ("limit", ("limite", "limites")),
+        ("equation", ("ecuacion", "ecuaciones")),
     )
+    _symbolic_topics = {"derivative", "integral", "limit", "equation"}
+    _course_request_tokens = {
+        "calculo",
+        "1",
+        "2",
+        "metodos",
+        "numericos",
+        "ejercicio",
+        "ejercicios",
+        "practica",
+        "practicar",
+        "quiero",
+        "dame",
+        "ponme",
+        "proponme",
+        "curso",
+        "tema",
+        "temas",
+    }
+    _reference_symbolic_topics = {
+        "antiderivadas_e_integrales_indefinidas": "integral",
+        "integrales_definidas_y_sumas_de_riemann": "integral",
+        "integracion_por_sustitucion_e_integracion_numerica": "integral",
+        "integracion_por_partes": "integral",
+        "metodo_de_sustitucion": "integral",
+        "sustitucion_01": "integral",
+        "por_partes_01": "integral",
+        "fracciones_parciales": "integral",
+        "integrales_impropias": "integral",
+        "teorema_fundamental_del_calculo": "integral",
+        "definicion_y_reglas_basicas_de_derivacion": "derivative",
+        "limites_de_una_funcion": "limit",
+        "continuidad_de_funciones": "limit",
+        "serie_de_taylor": "serie_de_taylor",
+    }
+    _history_limit = 6
 
     def __init__(
         self,
@@ -108,7 +145,12 @@ class PracticeService:
         self.local_dict = solver_service.local_dict.copy()
 
     def generate_practice(self, request_text: str, current_state: dict | None = None) -> PracticeGenerationResult:
-        template = self._select_template(request_text=request_text, current_state=current_state or {})
+        if not self.ollama_client:
+            raise RuntimeError("OllamaClient no esta configurado.")
+
+        state = current_state or {}
+        template = self._select_template(request_text=request_text, current_state=state)
+        history = self._build_updated_history(current_state=state, template=template)
 
         if template.raw_input and not template.expected_answer:
             parsed = self.parser_service.parse(template.raw_input)
@@ -135,6 +177,7 @@ class PracticeService:
             "reference_summary": template.reference_summary,
             "keywords": template.keywords or [],
             "attempts": 0,
+            "practice_history": history,
         }
         text = self._build_practice_prompt(
             exercise_text=template.exercise_text,
@@ -142,10 +185,20 @@ class PracticeService:
         )
         return PracticeGenerationResult(
             text=text,
-            state={"pending_practice": pending_practice},
+            state={
+                "practice_history": history,
+                "pending_practice": pending_practice,
+            },
+            exercise_text=template.exercise_text,
+            hint=template.hint,
+            topic=template.topic,
+            problem_type=problem_type,
         )
 
     def grade_attempt(self, *, pending_practice: dict, student_message: str) -> PracticeGradeResult:
+        if not self.ollama_client:
+            raise RuntimeError("OllamaClient no esta configurado.")
+
         student_answer = self._extract_student_answer(student_message)
         attempts = int(pending_practice.get("attempts", 0)) + 1
         grading_mode = str(pending_practice.get("grading_mode") or "symbolic")
@@ -157,15 +210,13 @@ class PracticeService:
                 attempts=attempts,
             )
 
-        if grading_mode == "keyword_rubric":
-            return self._grade_with_keywords(
-                pending_practice=pending_practice,
-                student_answer=student_answer,
-                attempts=attempts,
-            )
-
         expected_answer = str(pending_practice.get("expected_answer", "")).strip()
-        is_correct = self._answers_match(expected_answer=expected_answer, student_answer=student_answer)
+        problem_type = str(pending_practice.get("problem_type") or "")
+        is_correct = self._answers_match(
+            expected_answer=expected_answer,
+            student_answer=student_answer,
+            problem_type=problem_type,
+        )
 
         if is_correct:
             text = self._build_correct_feedback(
@@ -173,14 +224,17 @@ class PracticeService:
                 student_answer=student_answer,
                 expected_answer=expected_answer,
             )
-            return PracticeGradeResult(text=text, is_correct=True, next_state={})
+            return PracticeGradeResult(
+                text=text,
+                is_correct=True,
+                next_state=self._build_state_from_pending(pending_practice),
+            )
 
-        next_state = {
-            "pending_practice": {
-                **pending_practice,
-                "attempts": attempts,
-            }
-        }
+        next_state = self._build_state_from_pending(
+            pending_practice,
+            attempts=attempts,
+            keep_pending=True,
+        )
         text = self._build_incorrect_feedback(
             exercise_text=str(pending_practice.get("exercise_text", "")),
             student_answer=student_answer,
@@ -191,59 +245,56 @@ class PracticeService:
         return PracticeGradeResult(text=text, is_correct=False, next_state=next_state)
 
     def _select_template(self, *, request_text: str, current_state: dict) -> PracticeTemplate:
-        resolved_topic, reference = self._resolve_requested_topic(
+        resolved_topic, references = self._resolve_requested_topic(
             request_text=request_text,
             current_state=current_state,
         )
+        history = self._get_practice_history(current_state)
 
-        if resolved_topic == "integral":
-            return PracticeTemplate(
-                topic="integral",
-                problem_type="integral",
-                raw_input="Integral de 2*x + 3 dx",
-                exercise_text="Resuelve esta integral: integral de 2*x + 3 dx.",
-                hint="Piensa en la linealidad de la integral y en las potencias basicas.",
+        if resolved_topic in self._symbolic_topics:
+            return self._build_symbolic_template(
+                topic=resolved_topic,
+                request_text=request_text,
+                references=references,
+                history=history,
             )
-        if resolved_topic == "limit":
-            return PracticeTemplate(
-                topic="limit",
-                problem_type="limit",
-                raw_input="lim x->0 sin(x)/x",
-                exercise_text="Calcula este limite: lim x->0 sin(x)/x.",
-                hint="Recuerda uno de los limites notables mas usados en calculo 1.",
-            )
-        if resolved_topic == "equation":
-            return PracticeTemplate(
-                topic="equation",
-                problem_type="equation",
-                raw_input="Resuelve 3*x - 5 = 16",
-                exercise_text="Resuelve la ecuacion 3*x - 5 = 16.",
-                hint="Despeja x paso a paso manteniendo el equilibrio en ambos lados.",
-            )
+
         if resolved_topic == "serie_de_taylor":
-            x = Symbol("x")
-            expected = str(series(exp(x), x, 0, 4).removeO())
-            return PracticeTemplate(
-                topic="serie_de_taylor",
-                problem_type="serie_de_taylor",
-                exercise_text="Construye el polinomio de Taylor de orden 3 de e^x alrededor de x = 0.",
-                hint="Calcula f(0), f'(0), f''(0) y f'''(0), y luego arma P3(x) con la formula general.",
-                expected_answer=expected,
-                expected_sympy_input=expected,
-            )
-        if resolved_topic == "derivative":
-            return PracticeTemplate(
-                topic="derivative",
-                problem_type="derivative",
-                raw_input="derivada de 3*x^2 + 2*x - 5",
-                exercise_text="Deriva la funcion f(x) = 3*x^2 + 2*x - 5.",
-                hint="Aplica la regla de la potencia termino a termino.",
+            return self._build_taylor_template(
+                request_text=request_text,
+                references=references,
+                history=history,
             )
 
-        return self._build_knowledge_grounded_template(
-            topic=resolved_topic,
-            request_text=request_text,
-            reference=reference,
+        mapped_topic = self._map_reference_topic_to_generator(references)
+        if mapped_topic in self._symbolic_topics:
+            return self._build_symbolic_template(
+                topic=mapped_topic,
+                request_text=request_text,
+                references=references,
+                history=history,
+                requested_topic=resolved_topic,
+            )
+
+        if mapped_topic == "serie_de_taylor":
+            return self._build_taylor_template(
+                request_text=request_text,
+                references=references,
+                history=history,
+            )
+
+        if references:
+            return self._build_llm_grounded_template(
+                request_text=request_text,
+                references=references,
+                history=history,
+                requested_topic=resolved_topic,
+            )
+
+        fallback_topic = resolved_topic if resolved_topic not in {"calculo_1", "calculo_2", "metodos_numericos"} else "derivative"
+        return self._build_fallback_template(
+            topic=fallback_topic,
+            history=history,
         )
 
     def _resolve_requested_topic(
@@ -251,84 +302,298 @@ class PracticeService:
         *,
         request_text: str,
         current_state: dict,
-    ) -> tuple[str, KnowledgeSearchResult | None]:
+    ) -> tuple[str, list[KnowledgeSearchResult]]:
         normalized = normalize_search_text(request_text)
         pending_practice = dict(current_state or {}).get("pending_practice") or {}
+        course_hint = self.knowledge_base_service.detect_course_hint(request_text) if self.knowledge_base_service else None
 
         for topic, aliases in self._topic_aliases:
             if any(alias in normalized for alias in aliases):
-                return topic, self._find_reference(request_text)
+                return topic, self._find_references(request_text)
 
         if any(pattern in normalized for pattern in self._continuation_patterns):
             pending_topic = str(pending_practice.get("topic") or "").strip()
             if pending_topic:
-                return pending_topic, self._find_reference(pending_topic)
+                return pending_topic, self._find_references(pending_topic)
 
-        reference = self._find_reference(request_text)
-        if reference:
-            return reference.document.topic, reference
+        if course_hint and self._looks_like_course_request(normalized):
+            return course_hint, self._build_course_reference_pool(course_hint)
+
+        references = self._find_references(request_text)
+        if references:
+            return references[0].document.topic, references
 
         pending_topic = str(pending_practice.get("topic") or "").strip()
         if pending_topic:
-            return pending_topic, self._find_reference(pending_topic)
+            return pending_topic, self._find_references(pending_topic)
 
-        return "derivative", None
+        return "derivative", []
 
-    def _find_reference(self, query: str) -> KnowledgeSearchResult | None:
+    def _find_references(self, query: str, *, limit: int = 4) -> list[KnowledgeSearchResult]:
         if not self.knowledge_base_service:
-            return None
-        matches = self.knowledge_base_service.search(query, limit=1)
-        return matches[0] if matches else None
+            return []
+        return self.knowledge_base_service.search(query, limit=limit)
 
-    def _build_knowledge_grounded_template(
+    def _build_course_reference_pool(self, course: str, *, limit: int = 4) -> list[KnowledgeSearchResult]:
+        if not self.knowledge_base_service:
+            return []
+
+        references: list[KnowledgeSearchResult] = []
+        seen_topics: set[str] = set()
+        for document in self.knowledge_base_service.get_course_documents(course):
+            if document.topic in seen_topics:
+                continue
+            seen_topics.add(document.topic)
+            references.append(
+                KnowledgeSearchResult(
+                    document=document,
+                    score=1.0,
+                    matched_terms=[course],
+                )
+            )
+            if len(references) >= limit:
+                break
+        return references
+
+    def _looks_like_course_request(self, normalized_request: str) -> bool:
+        query_tokens = set(tokenize(normalized_request))
+        if not query_tokens:
+            return False
+        return query_tokens.issubset(self._course_request_tokens)
+
+    def _map_reference_topic_to_generator(self, references: list[KnowledgeSearchResult]) -> str | None:
+        for reference in references:
+            mapped = self._reference_symbolic_topics.get(reference.document.topic)
+            if mapped:
+                return mapped
+        return None
+
+    def _build_symbolic_template(
         self,
         *,
         topic: str,
         request_text: str,
-        reference: KnowledgeSearchResult | None,
+        references: list[KnowledgeSearchResult],
+        history: list[dict],
+        requested_topic: str | None = None,
     ) -> PracticeTemplate:
         if not self.ollama_client:
             raise RuntimeError("OllamaClient no esta configurado.")
 
-        if reference:
-            return self._build_llm_grounded_template(
-                request_text=request_text,
-                reference=reference,
+        topic_label = {
+            "derivative": "derivadas",
+            "integral": "integrales",
+            "limit": "limites",
+            "equation": "ecuaciones",
+        }[topic]
+        reference_context = self._format_reference_context(references)
+        history_block = self._format_history_block(history)
+        requested_topic_line = f"Tema del corpus a respetar: {requested_topic}\n" if requested_topic else ""
+        prompt = f"""
+Solicitud del estudiante:
+{request_text}
+
+Objetivo matematico:
+{topic_label}
+{requested_topic_line}Contexto del corpus:
+{reference_context}
+
+Ejercicios recientes para NO repetir:
+{history_block}
+
+Genera un ejercicio nuevo y breve.
+- Usa el corpus como guia conceptual, no como texto a copiar.
+- Puedes crear una expresion nueva si sigue fiel al tema.
+- Debe ser resoluble por un evaluador simbolico.
+- Usa solo la variable x.
+- Mantente en dificultad basica o media.
+- No repitas expresiones recientes ni hagas cambios triviales de coeficientes.
+
+Formatos permitidos para raw_input:
+- derivative: "derivada de <expresion>"
+- integral: "integral de <expresion> dx"
+- equation: "Resuelve <lado_izq> = <lado_der>"
+- limit: "lim x->a <expresion>"
+
+Devuelve solo JSON valido:
+{{
+  "mode": "symbolic",
+  "raw_input": "...",
+  "exercise_text": "...",
+  "hint": "..."
+}}
+""".strip()
+        try:
+            raw = self.ollama_client.generate(
+                system_prompt="Eres un generador interno de practica matematica. Devuelves solo JSON valido.",
+                prompt=prompt,
+                temperature=0.7,
+            )
+            payload = self._extract_json(raw)
+            raw_input = str(payload.get("raw_input", "")).strip()
+            exercise_text = str(payload.get("exercise_text", "")).strip()
+            hint = str(payload.get("hint", "")).strip()
+            if not raw_input or not hint:
+                raise ValueError("Missing symbolic practice fields.")
+            parsed = self.parser_service.parse(raw_input)
+            solved = self.solver_service.solve(parsed)
+            if not exercise_text:
+                exercise_text = self._exercise_text_from_raw_input(raw_input)
+            return PracticeTemplate(
+                topic=requested_topic or topic,
+                problem_type=parsed.problem_type.value,
+                raw_input=raw_input,
+                exercise_text=exercise_text,
+                hint=hint,
+                expected_answer=solved.final_result,
+                expected_sympy_input=solved.sympy_input,
+                grading_mode="symbolic",
+                reference_summary=self._reference_summary(references),
+                keywords=self._keywords_from_references(references),
+            )
+        except Exception as exc:
+            logger.warning("Falling back to deterministic symbolic practice for %s: %s", topic, exc)
+            return self._build_fallback_template(
+                topic=topic,
+                history=history,
+                reference_summary=self._reference_summary(references),
+                keywords=self._keywords_from_references(references),
+                topic_label=requested_topic or topic,
             )
 
-        return PracticeTemplate(
-            topic=topic,
-            problem_type="derivative",
-            raw_input="derivada de 3*x^2 + 2*x - 5",
-            exercise_text="Deriva la funcion f(x) = 3*x^2 + 2*x - 5.",
-            hint="Aplica la regla de la potencia termino a termino.",
-        )
+    def _build_taylor_template(
+        self,
+        *,
+        request_text: str,
+        references: list[KnowledgeSearchResult],
+        history: list[dict],
+    ) -> PracticeTemplate:
+        if not self.ollama_client:
+            raise RuntimeError("OllamaClient no esta configurado.")
+
+        reference_context = self._format_reference_context(references)
+        history_block = self._format_history_block(history)
+        prompt = f"""
+Solicitud del estudiante:
+{request_text}
+
+Tema objetivo:
+Serie de Taylor
+
+Contexto del corpus:
+{reference_context}
+
+Ejercicios recientes para NO repetir:
+{history_block}
+
+Genera un ejercicio nuevo de polinomio de Taylor.
+- Usa el corpus como base conceptual, no como copia.
+- Escoge una funcion segura para manipular simbolicamente.
+- Usa solo x como variable.
+- Trabaja alrededor de x = 0.
+- Usa orden 2, 3 o 4.
+- Evita repetir la misma funcion del historial.
+
+Funciones permitidas:
+- exp(x)
+- sin(x)
+- cos(x)
+- log(1 + x)
+- 1/(1 - x)
+
+Devuelve solo JSON valido:
+{{
+  "mode": "taylor",
+  "function_expr": "...",
+  "center": "0",
+  "order": 3,
+  "exercise_text": "...",
+  "hint": "..."
+}}
+""".strip()
+        try:
+            raw = self.ollama_client.generate(
+                system_prompt="Eres un generador interno de practica matematica. Devuelves solo JSON valido.",
+                prompt=prompt,
+                temperature=0.65,
+            )
+            payload = self._extract_json(raw)
+            function_expr = str(payload.get("function_expr", "")).strip()
+            center = str(payload.get("center", "0")).strip() or "0"
+            order = int(payload.get("order", 3))
+            exercise_text = str(payload.get("exercise_text", "")).strip()
+            hint = str(payload.get("hint", "")).strip()
+            if not function_expr or not hint:
+                raise ValueError("Missing Taylor practice fields.")
+            x = Symbol("x")
+            expr = parse_expr(
+                function_expr,
+                local_dict=self.local_dict.copy(),
+                transformations=self._transformations,
+                evaluate=True,
+            )
+            center_expr = parse_expr(
+                center,
+                local_dict=self.local_dict.copy(),
+                transformations=self._transformations,
+                evaluate=True,
+            )
+            expected = str(series(expr, x, center_expr, order + 1).removeO())
+            if not exercise_text:
+                exercise_text = (
+                    f"Construye el polinomio de Taylor de orden {order} de {function_expr} "
+                    f"alrededor de x = {center}."
+                )
+            return PracticeTemplate(
+                topic="serie_de_taylor",
+                problem_type="serie_de_taylor",
+                exercise_text=exercise_text,
+                hint=hint,
+                expected_answer=expected,
+                expected_sympy_input=expected,
+                grading_mode="symbolic",
+                reference_summary=self._reference_summary(references),
+                keywords=self._keywords_from_references(references),
+            )
+        except Exception as exc:
+            logger.warning("Falling back to deterministic Taylor practice: %s", exc)
+            return self._build_fallback_template(
+                topic="serie_de_taylor",
+                history=history,
+                reference_summary=self._reference_summary(references),
+                keywords=self._keywords_from_references(references),
+            )
 
     def _build_llm_grounded_template(
         self,
         *,
         request_text: str,
-        reference: KnowledgeSearchResult,
+        references: list[KnowledgeSearchResult],
+        history: list[dict],
+        requested_topic: str | None = None,
     ) -> PracticeTemplate:
-        document = reference.document
+        if not self.ollama_client:
+            raise RuntimeError("OllamaClient no esta configurado.")
+
         prompt = f"""
-Tema pedido por el estudiante:
+Solicitud del estudiante:
 {request_text}
 
-Tema recuperado del corpus:
-- curso: {document.course}
-- unidad: {document.unit}
-- tema: {document.topic}
-- subtema: {document.subtopic}
-- texto base: {document.text}
+Tema solicitado o inferido:
+{requested_topic or references[0].document.topic}
 
-Genera un solo ejercicio corto y util para practicar este tema.
-REGLAS ESTRICTAS:
-1. NO INVENTES NINGUN PROBLEMA MATEMATICO. Si el texto base menciona un ejemplo matematico, integrales o derivadas, DEBES usar EXACTAMENTE la misma expresion del texto base para crear el ejercicio.
-2. Si inventas polinomios nuevos, el evaluador de simbologia fallara. Solo reutiliza la teoria de "texto base".
-3. Si el tema es puramente teorico, pide una explicacion breve o justificada.
-4. La respuesta esperada debe ser breve y clara.
-5. Incluye una pista ('hint') corta.
+Contexto del corpus:
+{self._format_reference_context(references)}
+
+Ejercicios recientes para NO repetir:
+{self._format_history_block(history)}
+
+Genera un solo ejercicio breve y util.
+- Usa el corpus como base, pero redacta y construye una variante nueva.
+- No copies frases completas ni reutilices exactamente el mismo ejemplo.
+- Si el tema se presta a una pregunta conceptual, pide una explicacion corta o una justificacion concreta.
+- La respuesta esperada debe ser breve y fiel al tema.
+- Incluye una pista corta.
 
 Devuelve solo JSON valido con esta forma:
 {{
@@ -339,30 +604,221 @@ Devuelve solo JSON valido con esta forma:
   "keywords": ["...", "..."]
 }}
 """.strip()
-        raw = self.ollama_client.generate(
-            system_prompt="Eres un generador interno de practica matematica. Devuelves solo JSON valido.",
-            prompt=prompt,
+        try:
+            raw = self.ollama_client.generate(
+                system_prompt="Eres un generador interno de practica matematica. Devuelves solo JSON valido.",
+                prompt=prompt,
+                temperature=0.65,
+            )
+            payload = self._extract_json(raw)
+            exercise_text = str(payload.get("exercise_text", "")).strip()
+            expected_answer = str(payload.get("expected_answer", "")).strip()
+            hint = str(payload.get("hint", "")).strip()
+            rubric = str(payload.get("rubric", "")).strip()
+            raw_keywords = payload.get("keywords") or []
+            keywords = [str(item).strip() for item in raw_keywords if str(item).strip()]
+            if not exercise_text or not expected_answer or not hint:
+                raise ValueError("Missing fields in LLM practice template.")
+            return PracticeTemplate(
+                topic=requested_topic or references[0].document.topic,
+                problem_type=requested_topic or references[0].document.topic,
+                grading_mode="llm_rubric",
+                exercise_text=exercise_text,
+                expected_answer=expected_answer,
+                hint=hint,
+                rubric=rubric or f"La respuesta debe centrarse en {references[0].document.title}.",
+                reference_summary=self._reference_summary(references),
+                keywords=keywords or self._keywords_from_references(references),
+            )
+        except Exception as exc:
+            logger.warning("Falling back to conceptual practice for %s: %s", requested_topic, exc)
+            reference = references[0]
+            return PracticeTemplate(
+                topic=requested_topic or reference.document.topic,
+                problem_type=requested_topic or reference.document.topic,
+                grading_mode="llm_rubric",
+                exercise_text=(
+                    f"Explica con tus palabras la idea principal de {reference.document.title} "
+                    "y menciona un caso en el que se use."
+                ),
+                expected_answer=reference.document.text,
+                hint="Piensa en la definicion central y en para que sirve el metodo o concepto.",
+                rubric=f"La respuesta debe recoger la idea principal de {reference.document.title} y un uso razonable.",
+                reference_summary=self._reference_summary(references),
+                keywords=self._keywords_from_references(references),
+            )
+
+    def _build_fallback_template(
+        self,
+        *,
+        topic: str,
+        history: list[dict],
+        reference_summary: str | None = None,
+        keywords: list[str] | None = None,
+        topic_label: str | None = None,
+    ) -> PracticeTemplate:
+        signature_count = self._history_topic_count(history, topic_label or topic)
+        if topic == "integral":
+            options = (
+                PracticeTemplate(
+                    topic=topic_label or "integral",
+                    problem_type="integral",
+                    raw_input="integral de x^2 + 4*x + 1 dx",
+                    exercise_text="Resuelve esta integral: integral de x^2 + 4*x + 1 dx.",
+                    hint="Integra termino a termino usando la regla de la potencia.",
+                    reference_summary=reference_summary,
+                    keywords=keywords,
+                ),
+                PracticeTemplate(
+                    topic=topic_label or "integral",
+                    problem_type="integral",
+                    raw_input="integral de sin(x) + 3*x dx",
+                    exercise_text="Resuelve esta integral: integral de sin(x) + 3*x dx.",
+                    hint="Separa la integral en dos partes y usa linealidad.",
+                    reference_summary=reference_summary,
+                    keywords=keywords,
+                ),
+                PracticeTemplate(
+                    topic=topic_label or "integral",
+                    problem_type="integral",
+                    raw_input="integral de (2*x + 1)^2 dx",
+                    exercise_text="Resuelve esta integral: integral de (2*x + 1)^2 dx.",
+                    hint="Puedes expandir primero el cuadrado antes de integrar.",
+                    reference_summary=reference_summary,
+                    keywords=keywords,
+                ),
+            )
+            return options[signature_count % len(options)]
+
+        if topic == "limit":
+            options = (
+                PracticeTemplate(
+                    topic=topic_label or "limit",
+                    problem_type="limit",
+                    raw_input="lim x->0 (exp(x) - 1)/x",
+                    exercise_text="Calcula este limite: lim x->0 (exp(x) - 1)/x.",
+                    hint="Recuerda el comportamiento de e^x cerca de 0.",
+                    reference_summary=reference_summary,
+                    keywords=keywords,
+                ),
+                PracticeTemplate(
+                    topic=topic_label or "limit",
+                    problem_type="limit",
+                    raw_input="lim x->0 (1 - cos(x))/x^2",
+                    exercise_text="Calcula este limite: lim x->0 (1 - cos(x))/x^2.",
+                    hint="Piensa en un limite notable trigonometrico o en una expansion local.",
+                    reference_summary=reference_summary,
+                    keywords=keywords,
+                ),
+                PracticeTemplate(
+                    topic=topic_label or "limit",
+                    problem_type="limit",
+                    raw_input="lim x->0 sin(3*x)/x",
+                    exercise_text="Calcula este limite: lim x->0 sin(3*x)/x.",
+                    hint="Reescribe la expresion para usar sin(u)/u.",
+                    reference_summary=reference_summary,
+                    keywords=keywords,
+                ),
+            )
+            return options[signature_count % len(options)]
+
+        if topic == "equation":
+            options = (
+                PracticeTemplate(
+                    topic=topic_label or "equation",
+                    problem_type="equation",
+                    raw_input="Resuelve 4*x - 7 = 13",
+                    exercise_text="Resuelve la ecuacion 4*x - 7 = 13.",
+                    hint="Despeja x manteniendo el equilibrio en ambos lados.",
+                    reference_summary=reference_summary,
+                    keywords=keywords,
+                ),
+                PracticeTemplate(
+                    topic=topic_label or "equation",
+                    problem_type="equation",
+                    raw_input="Resuelve 5*x + 9 = 2*x + 21",
+                    exercise_text="Resuelve la ecuacion 5*x + 9 = 2*x + 21.",
+                    hint="Reune las x en un lado y los numeros en el otro.",
+                    reference_summary=reference_summary,
+                    keywords=keywords,
+                ),
+                PracticeTemplate(
+                    topic=topic_label or "equation",
+                    problem_type="equation",
+                    raw_input="Resuelve 7*(x - 1) = 21",
+                    exercise_text="Resuelve la ecuacion 7*(x - 1) = 21.",
+                    hint="Empieza simplificando o dividiendo ambos lados entre 7.",
+                    reference_summary=reference_summary,
+                    keywords=keywords,
+                ),
+            )
+            return options[signature_count % len(options)]
+
+        if topic == "serie_de_taylor":
+            options = (
+                PracticeTemplate(
+                    topic="serie_de_taylor",
+                    problem_type="serie_de_taylor",
+                    exercise_text="Construye el polinomio de Taylor de orden 3 de e^x alrededor de x = 0.",
+                    hint="Calcula derivadas sucesivas en 0 y arma el polinomio sin el termino O.",
+                    expected_answer="x**3/6 + x**2/2 + x + 1",
+                    expected_sympy_input="x**3/6 + x**2/2 + x + 1",
+                    reference_summary=reference_summary,
+                    keywords=keywords,
+                ),
+                PracticeTemplate(
+                    topic="serie_de_taylor",
+                    problem_type="serie_de_taylor",
+                    exercise_text="Construye el polinomio de Taylor de orden 4 de sin(x) alrededor de x = 0.",
+                    hint="Alterna derivadas de sin y cos, y conserva solo hasta grado 4.",
+                    expected_answer="-x**3/6 + x",
+                    expected_sympy_input="-x**3/6 + x",
+                    reference_summary=reference_summary,
+                    keywords=keywords,
+                ),
+                PracticeTemplate(
+                    topic="serie_de_taylor",
+                    problem_type="serie_de_taylor",
+                    exercise_text="Construye el polinomio de Taylor de orden 4 de cos(x) alrededor de x = 0.",
+                    hint="Recuerda que cos(x) aporta solo potencias pares cerca de 0.",
+                    expected_answer="x**4/24 - x**2/2 + 1",
+                    expected_sympy_input="x**4/24 - x**2/2 + 1",
+                    reference_summary=reference_summary,
+                    keywords=keywords,
+                ),
+            )
+            return options[signature_count % len(options)]
+
+        options = (
+            PracticeTemplate(
+                topic=topic_label or "derivative",
+                problem_type="derivative",
+                raw_input="derivada de 4*x^3 - x + 6",
+                exercise_text="Deriva la funcion f(x) = 4*x^3 - x + 6.",
+                hint="Aplica la regla de la potencia termino a termino.",
+                reference_summary=reference_summary,
+                keywords=keywords,
+            ),
+            PracticeTemplate(
+                topic=topic_label or "derivative",
+                problem_type="derivative",
+                raw_input="derivada de sin(x) + x^2",
+                exercise_text="Deriva la funcion f(x) = sin(x) + x^2.",
+                hint="Combina la derivada trigonometrica con la regla de la potencia.",
+                reference_summary=reference_summary,
+                keywords=keywords,
+            ),
+            PracticeTemplate(
+                topic=topic_label or "derivative",
+                problem_type="derivative",
+                raw_input="derivada de x^4 - 3*x^2 + 2*x",
+                exercise_text="Deriva la funcion f(x) = x^4 - 3*x^2 + 2*x.",
+                hint="Deriva cada termino por separado y luego simplifica.",
+                reference_summary=reference_summary,
+                keywords=keywords,
+            ),
         )
-        payload = self._extract_json(raw)
-        exercise_text = str(payload.get("exercise_text", "")).strip()
-        expected_answer = str(payload.get("expected_answer", "")).strip()
-        hint = str(payload.get("hint", "")).strip()
-        rubric = str(payload.get("rubric", "")).strip()
-        raw_keywords = payload.get("keywords") or []
-        keywords = [str(item).strip() for item in raw_keywords if str(item).strip()]
-        if not exercise_text or not expected_answer or not hint:
-            raise ValueError("Missing fields in LLM practice template.")
-        return PracticeTemplate(
-            topic=document.topic,
-            problem_type=document.topic,
-            grading_mode="llm_rubric",
-            exercise_text=exercise_text,
-            expected_answer=expected_answer,
-            hint=hint,
-            rubric=rubric or f"La respuesta debe centrarse en {document.title}.",
-            reference_summary=document.text,
-            keywords=keywords or document.tags,
-        )
+        return options[signature_count % len(options)]
 
     @staticmethod
     def _build_practice_prompt(*, exercise_text: str, hint: str) -> str:
@@ -421,10 +877,19 @@ Redacta una devolucion breve, natural y pedagogica.
 - Si ya van varios intentos, puedes ser un poco mas explicito.
 - No uses markdown decorativo.
 """.strip()
-        return self.ollama_client.generate(
-            system_prompt="Eres un tutor matematico cercano y preciso.",
-            prompt=prompt,
-        ).strip()
+        try:
+            return self.ollama_client.generate(
+                system_prompt="Eres un tutor matematico cercano y preciso.",
+                prompt=prompt,
+                temperature=0.35,
+            ).strip()
+        except OllamaClientError:
+            return self._fallback_incorrect_feedback(
+                student_answer=student_answer,
+                expected_answer=expected_answer,
+                hint=hint,
+                attempts=attempts,
+            )
 
     @staticmethod
     def _extract_student_answer(message: str) -> str:
@@ -439,17 +904,22 @@ Redacta una devolucion breve, natural y pedagogica.
             answer = answer.split("=", maxsplit=1)[1].strip()
         return answer
 
-    def _answers_match(self, *, expected_answer: str, student_answer: str) -> bool:
+    def _answers_match(
+        self,
+        *,
+        expected_answer: str,
+        student_answer: str,
+        problem_type: str = "",
+    ) -> bool:
         if not student_answer:
             return False
 
         expected = expected_answer.strip()
         student = student_answer.strip()
-        
-        # Unify 'C' and 'c' for integration constants so it doesn't fail symbolically
+
         expected = expected.replace("+ C", "+ c").replace("+C", "+c")
         student = student.replace("+ C", "+ c").replace("+C", "+c")
-        
+
         if expected == student:
             return True
 
@@ -471,6 +941,11 @@ Redacta una devolucion breve, natural y pedagogica.
                 transformations=self._transformations,
                 evaluate=True,
             )
+            if problem_type == "integral" and self._integral_answers_match(
+                expected_expr=expected_expr,
+                student_expr=student_expr,
+            ):
+                return True
             difference = simplify(expected_expr - student_expr)
             return difference == 0
         except Exception:
@@ -480,6 +955,78 @@ Redacta una devolucion breve, natural y pedagogica.
                 return simplify(expected_eq - student_eq) == 0
             except Exception:
                 return False
+
+    @staticmethod
+    def _integral_answers_match(*, expected_expr, student_expr) -> bool:
+        free_symbols = sorted(
+            {
+                symbol
+                for symbol in expected_expr.free_symbols.union(student_expr.free_symbols)
+                if symbol.name != "c"
+            },
+            key=lambda item: item.name,
+        )
+        variable = free_symbols[0] if free_symbols else Symbol("x")
+        return simplify((expected_expr - student_expr).diff(variable)) == 0
+
+    @staticmethod
+    def _fallback_incorrect_feedback(
+        *,
+        student_answer: str,
+        expected_answer: str,
+        hint: str,
+        attempts: int,
+    ) -> str:
+        if attempts <= 1:
+            return (
+                "No coincide todavia con la respuesta esperada. "
+                f"Revisa tu expresion y usa esta pista: {hint}"
+            )
+        return (
+            "Aun hay un detalle por corregir. "
+            f"La referencia esperada es {expected_answer}. "
+            "Comparala con tu resultado y ajusta el paso donde te desviaste."
+        )
+
+    def _fallback_llm_rubric_grade(
+        self,
+        *,
+        pending_practice: dict,
+        student_answer: str,
+        attempts: int,
+    ) -> PracticeGradeResult:
+        keywords = [
+            str(keyword).strip().lower()
+            for keyword in pending_practice.get("keywords", [])
+            if str(keyword).strip()
+        ]
+        student_tokens = set(tokenize(student_answer))
+        overlap = {keyword for keyword in keywords if keyword in student_tokens}
+        min_hits = min(2, len(keywords)) if keywords else 0
+        is_correct = bool(keywords) and len(overlap) >= min_hits
+
+        if is_correct:
+            feedback = (
+                "Tu respuesta recoge la idea principal del tema, asi que la doy por correcta. "
+                "Si quieres, la afinamos o pasamos a una variante mas retadora."
+            )
+        else:
+            feedback = (
+                "No pude usar el evaluador automatico en este momento. "
+                "Tu respuesta todavia no muestra con suficiente claridad la idea central del tema. "
+                f"Apoyate en esta pista: {pending_practice.get('hint', '')}"
+            ).strip()
+
+        next_state = self._build_state_from_pending(
+            pending_practice,
+            attempts=attempts,
+            keep_pending=not is_correct,
+        )
+        return PracticeGradeResult(
+            text=feedback,
+            is_correct=is_correct,
+            next_state=next_state,
+        )
 
     def _grade_with_llm_rubric(
         self,
@@ -515,66 +1062,139 @@ Evalua si la respuesta es suficientemente correcta para este nivel.
 Devuelve solo JSON valido:
 {{"is_correct": true, "feedback": "..."}}
 """.strip()
-        raw = self.ollama_client.generate(
-            system_prompt="Eres un evaluador interno de practica matematica. Devuelves solo JSON valido.",
-            prompt=prompt,
-        )
-        payload = self._extract_json(raw)
-        is_correct = bool(payload.get("is_correct"))
-        feedback = str(payload.get("feedback", "")).strip()
-        if feedback:
-            next_state = {} if is_correct else {
-                "pending_practice": {
-                    **pending_practice,
-                    "attempts": attempts,
-                }
-            }
-            return PracticeGradeResult(
-                text=feedback,
-                is_correct=is_correct,
-                next_state=next_state,
+        try:
+            raw = self.ollama_client.generate(
+                system_prompt="Eres un evaluador interno de practica matematica. Devuelves solo JSON valido.",
+                prompt=prompt,
+                temperature=0.25,
             )
-        
-        raise ValueError("El evaluador interno no devolvio un feedback valido.")
+            payload = self._extract_json(raw)
+            is_correct = bool(payload.get("is_correct"))
+            feedback = str(payload.get("feedback", "")).strip()
+            if feedback:
+                next_state = self._build_state_from_pending(
+                    pending_practice,
+                    attempts=attempts,
+                    keep_pending=not is_correct,
+                )
+                return PracticeGradeResult(
+                    text=feedback,
+                    is_correct=is_correct,
+                    next_state=next_state,
+                )
+        except (OllamaClientError, ValueError, json.JSONDecodeError):
+            pass
 
-    def _grade_with_keywords(
-        self,
-        *,
-        pending_practice: dict,
-        student_answer: str,
-        attempts: int,
-    ) -> PracticeGradeResult:
-        keywords = [
-            str(keyword).strip().lower()
-            for keyword in pending_practice.get("keywords", [])
-            if str(keyword).strip()
-        ]
-        student_tokens = set(tokenize(student_answer))
-        overlap = {keyword for keyword in keywords if keyword in student_tokens}
-        is_correct = len(overlap) >= min(2, len(keywords)) if keywords else False
-
-        if is_correct:
-            text = self._build_correct_feedback(
-                exercise_text=str(pending_practice.get("exercise_text", "")),
-                student_answer=student_answer,
-                expected_answer=str(pending_practice.get("expected_answer", "")),
-            )
-            return PracticeGradeResult(text=text, is_correct=True, next_state={})
-
-        next_state = {
-            "pending_practice": {
-                **pending_practice,
-                "attempts": attempts,
-            }
-        }
-        text = self._build_incorrect_feedback(
-            exercise_text=str(pending_practice.get("exercise_text", "")),
+        return self._fallback_llm_rubric_grade(
+            pending_practice=pending_practice,
             student_answer=student_answer,
-            expected_answer=str(pending_practice.get("expected_answer", "")),
-            hint=str(pending_practice.get("hint", "")),
             attempts=attempts,
         )
-        return PracticeGradeResult(text=text, is_correct=False, next_state=next_state)
+
+    def _build_state_from_pending(
+        self,
+        pending_practice: dict,
+        *,
+        attempts: int | None = None,
+        keep_pending: bool = False,
+    ) -> dict:
+        history = list(pending_practice.get("practice_history") or [])
+        next_state: dict = {"practice_history": history}
+        if keep_pending:
+            next_state["pending_practice"] = {
+                **pending_practice,
+                "attempts": attempts if attempts is not None else int(pending_practice.get("attempts", 0)),
+            }
+        return next_state
+
+    def _get_practice_history(self, current_state: dict) -> list[dict]:
+        history = list((current_state or {}).get("practice_history") or [])
+        cleaned_history: list[dict] = []
+        for entry in history[-self._history_limit :]:
+            if isinstance(entry, dict):
+                cleaned_history.append(
+                    {
+                        "topic": str(entry.get("topic", "")).strip(),
+                        "signature": str(entry.get("signature", "")).strip(),
+                        "exercise_text": str(entry.get("exercise_text", "")).strip(),
+                    }
+                )
+        return cleaned_history
+
+    def _build_updated_history(self, *, current_state: dict, template: PracticeTemplate) -> list[dict]:
+        history = self._get_practice_history(current_state)
+        signature_source = template.raw_input or template.expected_sympy_input or template.exercise_text
+        history.append(
+            {
+                "topic": template.topic,
+                "signature": signature_source.strip(),
+                "exercise_text": template.exercise_text.strip(),
+            }
+        )
+        return history[-self._history_limit :]
+
+    @staticmethod
+    def _format_reference_context(references: list[KnowledgeSearchResult]) -> str:
+        if not references:
+            return "Sin referencias del corpus."
+
+        blocks = []
+        for index, reference in enumerate(references[:4], start=1):
+            doc = reference.document
+            blocks.append(
+                f"[{index}] curso={doc.course}; unidad={doc.unit}; tema={doc.topic}; "
+                f"subtema={doc.subtopic}; texto={doc.text}"
+            )
+        return "\n".join(blocks)
+
+    @staticmethod
+    def _format_history_block(history: list[dict]) -> str:
+        if not history:
+            return "No hay historial previo."
+        lines = []
+        for entry in history[-4:]:
+            topic = entry.get("topic", "")
+            signature = entry.get("signature", "")
+            lines.append(f"- {topic}: {signature}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _exercise_text_from_raw_input(raw_input: str) -> str:
+        normalized = raw_input.strip()
+        if normalized.lower().startswith("resuelve"):
+            return normalized if normalized.endswith(".") else f"{normalized}."
+        if normalized.lower().startswith("lim "):
+            return f"Calcula este limite: {normalized}."
+        if normalized.lower().startswith("integral"):
+            return f"Resuelve esta integral: {normalized}."
+        if normalized.lower().startswith("derivada"):
+            expression = re.sub(r"(?i)^derivada\s+de\s*", "", normalized).strip()
+            return f"Deriva la funcion f(x) = {expression}."
+        return normalized if normalized.endswith(".") else f"{normalized}."
+
+    @staticmethod
+    def _reference_summary(references: list[KnowledgeSearchResult]) -> str | None:
+        if not references:
+            return None
+        return " ".join(reference.document.text for reference in references[:2]).strip()
+
+    @staticmethod
+    def _keywords_from_references(references: list[KnowledgeSearchResult]) -> list[str]:
+        keywords: list[str] = []
+        for reference in references:
+            keywords.extend(reference.document.tags)
+        seen: set[str] = set()
+        deduped: list[str] = []
+        for keyword in keywords:
+            if keyword in seen:
+                continue
+            seen.add(keyword)
+            deduped.append(keyword)
+        return deduped[:6]
+
+    @staticmethod
+    def _history_topic_count(history: list[dict], topic: str) -> int:
+        return sum(1 for entry in history if str(entry.get("topic", "")).strip() == topic)
 
     @staticmethod
     def _extract_json(raw: str) -> dict:
@@ -583,14 +1203,16 @@ Devuelve solo JSON valido:
             raw = raw[7:]
         if raw.endswith("```"):
             raw = raw[:-3]
-        
+
         match = re.search(r"\{.*\}", raw, re.DOTALL)
         if not match:
             raise ValueError(f"No JSON object found in practice response. Raw: {raw}")
         json_str = match.group(0)
-        
+
+        json_str = re.sub(r'\\(?=[^"\\/bfnrtu])', r'\\\\', json_str)
+
         try:
             return json.loads(json_str)
-        except json.JSONDecodeError as e:
-            logger.error("JSON parse error: %s - Raw string: %s", e, json_str)
-            raise ValueError(f"Invalid JSON generated: {e}")
+        except json.JSONDecodeError as exc:
+            logger.error("JSON parse error: %s - Raw string: %s", exc, json_str)
+            raise ValueError(f"Invalid JSON generated: {exc}") from exc

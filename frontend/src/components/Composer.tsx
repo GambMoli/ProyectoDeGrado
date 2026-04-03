@@ -1,30 +1,33 @@
 import { useRef, useState } from "react";
-import type { ChangeEvent, KeyboardEvent } from "react";
+import type { KeyboardEvent } from "react";
+
+import { AttachmentIcon, CloseIcon, FormulaIcon, SendIcon } from "./Icons";
 
 interface ComposerProps {
   disabled: boolean;
-  onSubmit: (payload: { message: string; file: File | null }) => Promise<void>;
+  selectedFile: File | null;
+  onClearFile: () => void;
+  onOpenAttach: () => void;
+  onSubmit: (message: string) => Promise<void>;
 }
 
-export function Composer({ disabled, onSubmit }: ComposerProps) {
+export function Composer({
+  disabled,
+  selectedFile,
+  onClearFile,
+  onOpenAttach,
+  onSubmit,
+}: ComposerProps) {
   const [message, setMessage] = useState("");
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   async function handleSubmit() {
     if (disabled || (!message.trim() && !selectedFile)) {
       return;
     }
 
-    await onSubmit({
-      message: message.trim(),
-      file: selectedFile,
-    });
+    await onSubmit(message.trim());
     setMessage("");
-    setSelectedFile(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -34,47 +37,59 @@ export function Composer({ disabled, onSubmit }: ComposerProps) {
     }
   }
 
-  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const nextFile = event.target.files?.[0] ?? null;
-    setSelectedFile(nextFile);
+  function insertFormulaTemplate() {
+    const nextValue = message ? `${message}  f(x) = ` : "f(x) = ";
+    setMessage(nextValue);
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(nextValue.length, nextValue.length);
+    });
   }
 
   return (
     <div className="composer">
-      <div className="composer__controls">
+      <div className="composer__tools">
+        <button className="composer__tool" type="button" onClick={insertFormulaTemplate}>
+          <FormulaIcon className="composer__tool-icon" />
+          <span>Insertar formula</span>
+        </button>
+        <button className="composer__tool" type="button" onClick={onOpenAttach}>
+          <AttachmentIcon className="composer__tool-icon" />
+          <span>PNG/JPEG</span>
+        </button>
+        <span className="composer__presence" aria-hidden="true" />
+      </div>
+
+      {selectedFile ? (
+        <div className="composer__file-chip">
+          <span>{selectedFile.name}</span>
+          <button type="button" onClick={onClearFile} aria-label="Quitar archivo adjunto">
+            <CloseIcon className="composer__file-chip-icon" />
+          </button>
+        </div>
+      ) : null}
+
+      <div className="composer__box">
         <textarea
+          ref={textareaRef}
           className="composer__textarea"
-          placeholder="Escribe tu duda o pega el ejercicio. Ejemplo: integral de x^2 dx"
+          placeholder="Escribe tu consulta matematica aqui..."
           value={message}
           disabled={disabled}
           onChange={(event) => setMessage(event.target.value)}
           onKeyDown={handleKeyDown}
-          rows={4}
+          rows={2}
         />
 
-        <div className="composer__actions">
-          <label className="button button--ghost composer__upload">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/jpg,image/webp"
-              disabled={disabled}
-              onChange={handleFileChange}
-            />
-            Subir imagen
-          </label>
-
-          <button className="button button--primary" type="button" disabled={disabled} onClick={() => void handleSubmit()}>
-            {disabled ? "Procesando..." : "Enviar"}
-          </button>
-        </div>
-      </div>
-
-      <div className="composer__footer">
-        <span>
-          Puedes enviar texto, imagen o ambos. Si subes una imagen borrosa, el sistema te pedirá una versión más clara.
-        </span>
-        {selectedFile ? <strong>Archivo listo: {selectedFile.name}</strong> : <strong>Sin imagen adjunta</strong>}
+        <button
+          className="composer__send"
+          type="button"
+          disabled={disabled || (!message.trim() && !selectedFile)}
+          onClick={() => void handleSubmit()}
+          aria-label={disabled ? "Procesando mensaje" : "Enviar mensaje"}
+        >
+          <SendIcon className="composer__send-icon" />
+        </button>
       </div>
     </div>
   );

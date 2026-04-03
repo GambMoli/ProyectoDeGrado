@@ -1,71 +1,53 @@
-import type { ConversationSummary } from "../types/api";
-import { formatTimestamp } from "../utils/formatters";
+import {
+  BrandIcon,
+  ChatIcon,
+  ExerciseIcon,
+  HistoryIcon,
+  PlusIcon,
+  SettingsIcon,
+} from "./Icons";
 
 interface SidebarProps {
-  conversations: ConversationSummary[];
-  activeConversationId: string | null;
-  isLoading: boolean;
-  onSelectConversation: (conversationId: string) => void;
-  onNewConversation: () => void;
+  onOpenHistory: () => void;
+  onOpenAttach: () => void;
 }
 
-export function Sidebar({
-  conversations,
-  activeConversationId,
-  isLoading,
-  onSelectConversation,
-  onNewConversation,
-}: SidebarProps) {
+export function Sidebar({ onOpenHistory, onOpenAttach }: SidebarProps) {
   return (
     <aside className="sidebar">
-      <div className="sidebar__header">
+      <div className="sidebar__brand">
+        <div className="sidebar__brand-icon">
+          <BrandIcon className="sidebar__brand-svg" />
+        </div>
         <div>
-          <p className="sidebar__eyebrow">MVP Tutor de Cálculo</p>
-          <h1>Tutor IA</h1>
+          <h1>Cubik IA</h1>
+          <p>Academic Curator</p>
         </div>
-        <button className="button button--ghost" type="button" onClick={onNewConversation}>
-          Nueva
+      </div>
+
+      <nav className="sidebar__nav" aria-label="Navegacion principal">
+        <button className="sidebar__nav-item is-active" type="button">
+          <ChatIcon className="sidebar__nav-svg" />
+          <span>Chat</span>
         </button>
-      </div>
+        <button className="sidebar__nav-item" type="button" onClick={onOpenHistory}>
+          <HistoryIcon className="sidebar__nav-svg" />
+          <span>History</span>
+        </button>
+        <button className="sidebar__nav-item" type="button" onClick={onOpenAttach}>
+          <ExerciseIcon className="sidebar__nav-svg" />
+          <span>Exercises</span>
+        </button>
+        <button className="sidebar__nav-item" type="button">
+          <SettingsIcon className="sidebar__nav-svg" />
+          <span>Settings</span>
+        </button>
+      </nav>
 
-      <div className="sidebar__panel">
-        <div className="sidebar__panel-header">
-          <h2>Historial</h2>
-          {isLoading ? <span className="sidebar__hint">Actualizando...</span> : null}
-        </div>
-
-        {conversations.length === 0 ? (
-          <div className="sidebar__empty">
-            Tus conversaciones aparecerán aquí después del primer ejercicio resuelto.
-          </div>
-        ) : (
-          <div className="conversation-list">
-            {conversations.map((conversation) => (
-              <button
-                key={conversation.id}
-                className={`conversation-list__item ${
-                  conversation.id === activeConversationId ? "is-active" : ""
-                }`}
-                type="button"
-                onClick={() => onSelectConversation(conversation.id)}
-              >
-                <span className="conversation-list__title">{conversation.title}</span>
-                <span className="conversation-list__meta">
-                  {conversation.summary ?? conversation.last_message_preview ?? "Sin resumen"}
-                </span>
-                <span className="conversation-list__footer">
-                  <strong>{conversation.message_count} mensajes</strong>
-                  <span>{formatTimestamp(conversation.updated_at)}</span>
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="sidebar__footnote">
-        El backend resuelve con SymPy, explica con plantillas u Ollama y deja el OCR desacoplado.
-      </div>
+      <button className="sidebar__cta" type="button" onClick={onOpenAttach}>
+        <PlusIcon className="sidebar__cta-icon" />
+        <span>New Exercise</span>
+      </button>
     </aside>
   );
 }

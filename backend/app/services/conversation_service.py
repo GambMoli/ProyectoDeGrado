@@ -11,13 +11,14 @@ from app.repositories.conversation_repository import ConversationRepository
 from app.schemas.chat import ChatRequest, ChatResponse, ExerciseOut, ExerciseResolutionOut, MessageOut
 from app.schemas.conversation import ConversationDetail, ConversationSummary
 from app.schemas.enums import ChatMode, ExerciseStatus, MessageRole, MessageStatus, SourceType
+from app.services.conversation_planner_service import ConversationPlan, ConversationPlannerService
 from app.services.explanation_service import ExplanationService
 from app.services.math_parser_service import MathParserError, MathParserService
 from app.services.ocr_service import OCRService
 from app.services.practice_service import PracticeService
+from app.services.response_composer_service import ResponseComposerService
 from app.services.sympy_solver_service import SolverError, SymPySolverService
 from app.services.topic_explanation_service import TopicExplanationService
-from app.services.tutor_agent_service import TutorAgentService
 
 
 class ConversationService:
@@ -30,7 +31,8 @@ class ConversationService:
         explanation_service: ExplanationService,
         ocr_service: OCRService,
         practice_service: PracticeService,
-        tutor_agent_service: TutorAgentService,
+        conversation_planner_service: ConversationPlannerService,
+        response_composer_service: ResponseComposerService,
         topic_explanation_service: TopicExplanationService,
     ) -> None:
         self.repository = repository
@@ -39,7 +41,8 @@ class ConversationService:
         self.explanation_service = explanation_service
         self.ocr_service = ocr_service
         self.practice_service = practice_service
-        self.tutor_agent_service = tutor_agent_service
+        self.conversation_planner_service = conversation_planner_service
+        self.response_composer_service = response_composer_service
         self.topic_explanation_service = topic_explanation_service
         self.settings = get_settings()
 
@@ -65,53 +68,21 @@ class ConversationService:
                 conversation=conversation,
                 current_message_id=user_message.id,
             )
-            if payload.mode == ChatMode.THEORY:
-                decision_action = "answer_theory"
-            elif payload.mode == ChatMode.EXERCISE:
-                decision_action = "solve_exercise"
-            else:
-                decision = self.tutor_agent_service.decide(
-                    message=payload.message,
-                    conversation_context=conversation_context,
-                    agent_state=conversation.agent_state,
-                )
-                decision_action = decision.action
-
-            if decision_action == "generate_practice":
-                response = self._generate_practice(
-                    db=db,
-                    user_id=user.id,
-                    conversation=conversation,
-                    user_message=user_message,
-                    raw_input=payload.message,
-                )
-            elif decision_action == "grade_practice":
-                response = self._grade_practice(
-                    db=db,
-                    user_id=user.id,
-                    conversation=conversation,
-                    user_message=user_message,
-                    raw_input=payload.message,
-                )
-            elif decision_action in {"answer_theory", "ask_clarification"}:
-                response = self._answer_theory(
-                    db=db,
-                    user_id=user.id,
-                    conversation=conversation,
-                    user_message=user_message,
-                    raw_input=payload.message,
-                    conversation_context=conversation_context,
-                )
-            else:
-                response = self._solve_and_respond(
-                    db=db,
-                    user_id=user.id,
-                    conversation=conversation,
-                    user_message=user_message,
-                    source_type=SourceType.TEXT,
-                    raw_input=payload.message,
-                    ocr_text=None,
-                )
+            plan = self.conversation_planner_service.plan(
+                message=payload.message,
+                requested_mode=payload.mode,
+                conversation_context=conversation_context,
+                agent_state=conversation.agent_state,
+            )
+            response = self._execute_text_plan(
+                db=db,
+                user_id=user.id,
+                conversation=conversation,
+                user_message=user_message,
+                raw_input=payload.message,
+                conversation_context=conversation_context,
+                plan=plan,
+            )
             db.commit()
             return response
         except LookupError as exc:
@@ -253,6 +224,79 @@ class ConversationService:
     def count_knowledge_documents(self) -> int:
         return self.topic_explanation_service.knowledge_base_service.count_documents()
 
+    def _execute_text_plan(
+        self,
+        *,
+        db: Session,
+        user_id: str,
+        conversation: Conversation,
+        user_message: Message,
+        raw_input: str,
+        conversation_context: list[str],
+        plan: ConversationPlan,
+    ) -> ChatResponse:
+        actions = set(plan.actions)
+
+        if "grade_practice" in actions:
+            return self._grade_practice(
+                db=db,
+                user_id=user_id,
+                conversation=conversation,
+                user_message=user_message,
+                raw_input=raw_input,
+            )
+
+        if "solve_exercise" in actions:
+            return self._solve_and_respond(
+                db=db,
+                user_id=user_id,
+                conversation=conversation,
+                user_message=user_message,
+                source_type=SourceType.TEXT,
+                raw_input=raw_input,
+                ocr_text=None,
+            )
+
+        if {"answer_theory", "generate_practice"}.issubset(actions):
+            return self._answer_theory_with_practice(
+                db=db,
+                user_id=user_id,
+                conversation=conversation,
+                user_message=user_message,
+                raw_input=raw_input,
+                conversation_context=conversation_context,
+                detail_level=plan.detail_level,
+            )
+
+        if "generate_practice" in actions:
+            return self._generate_practice(
+                db=db,
+                user_id=user_id,
+                conversation=conversation,
+                user_message=user_message,
+                raw_input=raw_input,
+                conversation_context=conversation_context,
+                detail_level=plan.detail_level,
+            )
+
+        if "answer_theory" in actions:
+            return self._answer_theory(
+                db=db,
+                user_id=user_id,
+                conversation=conversation,
+                user_message=user_message,
+                raw_input=raw_input,
+                conversation_context=conversation_context,
+            )
+
+        return self._ask_clarification(
+            db=db,
+            user_id=user_id,
+            conversation=conversation,
+            user_message=user_message,
+            raw_input=raw_input,
+        )
+
     def _answer_theory(
         self,
         *,
@@ -267,19 +311,14 @@ class ConversationService:
             raw_input,
             conversation_context=conversation_context,
         )
-        status_value = (
-            MessageStatus.NEEDS_CLARIFICATION.value
-            if result.source == "knowledge_fallback"
-            else MessageStatus.SOLVED.value
-        )
         assistant_message = self.repository.create_message(
             db,
             conversation_id=conversation.id,
             role=MessageRole.ASSISTANT.value,
             content=result.text,
             source_type=SourceType.TEXT.value,
-            status=status_value,
-            error_message=None if status_value == MessageStatus.SOLVED.value else result.text,
+            status=MessageStatus.SOLVED.value,
+            error_message=None,
         )
         summary = result.references[0].document.topic.replace("_", " ") if result.references else raw_input
         self.repository.touch_conversation(
@@ -303,16 +342,26 @@ class ConversationService:
         conversation: Conversation,
         user_message: Message,
         raw_input: str,
+        conversation_context: list[str],
+        detail_level: str = "auto",
     ) -> ChatResponse:
         generated = self.practice_service.generate_practice(
             request_text=raw_input,
             current_state=conversation.agent_state,
         )
+        composed = self.response_composer_service.compose_guidance(
+            user_message=raw_input,
+            conversation_context=conversation_context,
+            theory_text=None,
+            exercise_text=generated.exercise_text,
+            hint=generated.hint,
+            detail_level=detail_level,
+        )
         assistant_message = self.repository.create_message(
             db,
             conversation_id=conversation.id,
             role=MessageRole.ASSISTANT.value,
-            content=generated.text,
+            content=composed.text,
             source_type=SourceType.TEXT.value,
             status=MessageStatus.SOLVED.value,
         )
@@ -321,7 +370,61 @@ class ConversationService:
             conversation,
             summary="practica guiada",
             title_hint=raw_input,
-            agent_state=generated.state,
+            agent_state=self._merge_generated_state(conversation.agent_state, generated.state),
+        )
+        return ChatResponse(
+            user_id=user_id,
+            conversation_id=conversation.id,
+            user_message=self._build_message_out(user_message),
+            assistant_message=self._build_message_out(assistant_message),
+        )
+
+    def _answer_theory_with_practice(
+        self,
+        *,
+        db: Session,
+        user_id: str,
+        conversation: Conversation,
+        user_message: Message,
+        raw_input: str,
+        conversation_context: list[str],
+        detail_level: str = "auto",
+    ) -> ChatResponse:
+        theory_result = self.topic_explanation_service.answer(
+            raw_input,
+            conversation_context=conversation_context,
+        )
+        generated = self.practice_service.generate_practice(
+            request_text=raw_input,
+            current_state=conversation.agent_state,
+        )
+        composed = self.response_composer_service.compose_guidance(
+            user_message=raw_input,
+            conversation_context=conversation_context,
+            theory_text=theory_result.text,
+            exercise_text=generated.exercise_text,
+            hint=generated.hint,
+            detail_level=detail_level,
+        )
+        assistant_message = self.repository.create_message(
+            db,
+            conversation_id=conversation.id,
+            role=MessageRole.ASSISTANT.value,
+            content=composed.text,
+            source_type=SourceType.TEXT.value,
+            status=MessageStatus.SOLVED.value,
+        )
+        summary = (
+            theory_result.references[0].document.topic.replace("_", " ")
+            if theory_result.references
+            else "teoria y practica"
+        )
+        self.repository.touch_conversation(
+            db,
+            conversation,
+            summary=summary,
+            title_hint=raw_input,
+            agent_state=self._merge_generated_state(conversation.agent_state, generated.state),
         )
         return ChatResponse(
             user_id=user_id,
@@ -372,6 +475,41 @@ class ConversationService:
             summary="practica corregida" if graded.is_correct else "practica en curso",
             title_hint=raw_input,
             agent_state=graded.next_state,
+        )
+        return ChatResponse(
+            user_id=user_id,
+            conversation_id=conversation.id,
+            user_message=self._build_message_out(user_message),
+            assistant_message=self._build_message_out(assistant_message),
+        )
+
+    def _ask_clarification(
+        self,
+        *,
+        db: Session,
+        user_id: str,
+        conversation: Conversation,
+        user_message: Message,
+        raw_input: str,
+    ) -> ChatResponse:
+        clarification_text = (
+            "Dime un poco mas que quieres hacer: "
+            "si prefieres una explicacion, practicar con un ejercicio o resolver uno concreto."
+        )
+        assistant_message = self.repository.create_message(
+            db,
+            conversation_id=conversation.id,
+            role=MessageRole.ASSISTANT.value,
+            content=clarification_text,
+            source_type=SourceType.TEXT.value,
+            status=MessageStatus.NEEDS_CLARIFICATION.value,
+            error_message=clarification_text,
+        )
+        self.repository.touch_conversation(
+            db,
+            conversation,
+            summary=clarification_text,
+            title_hint=raw_input,
         )
         return ChatResponse(
             user_id=user_id,
@@ -526,6 +664,12 @@ class ConversationService:
             user_message=self._build_message_out(user_message),
             assistant_message=self._build_message_out(assistant_message),
         )
+
+    @staticmethod
+    def _merge_generated_state(current_state: dict | None, generated_state: dict) -> dict:
+        merged = dict(current_state or {})
+        merged.update(generated_state)
+        return merged
 
     def _build_conversation_summary(self, conversation: Conversation) -> ConversationSummary:
         last_message = conversation.messages[-1] if conversation.messages else None

@@ -1,103 +1,68 @@
 import type { Message } from "../types/api";
-import { formatTimestamp, labelForExerciseStatus, labelForProblemType, labelForRole } from "../utils/formatters";
+import { BotAvatarIcon, UserAvatarIcon } from "./Icons";
 
 interface ChatMessageProps {
   message: Message;
 }
 
 function renderParagraphs(content: string) {
-  return content.split(/\n{2,}|\n/).map((paragraph, index) => (
-    <p key={`${paragraph}-${index}`}>{paragraph}</p>
-  ));
+  return content
+    .split(/\n{2,}|\n/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .map((paragraph, index) => <p key={`${paragraph}-${index}`}>{paragraph}</p>);
 }
 
 export function ChatMessage({ message }: ChatMessageProps) {
-  const exercise = message.role === "assistant" ? message.exercise : null;
+  const isAssistantLike = message.role !== "user";
+  const bubbleTone = isAssistantLike ? "assistant" : "user";
+  const exercise = isAssistantLike ? message.exercise : null;
+  const resolution = exercise?.resolution ?? null;
+  const shouldShowBody =
+    !isAssistantLike || !resolution || message.content.trim().length < 180;
 
   return (
-    <article className={`message message--${message.role}`}>
-      <div className="message__head">
-        <div>
-          <span className="message__role">{labelForRole(message.role)}</span>
-          <span className="message__time">{formatTimestamp(message.created_at)}</span>
-        </div>
-        <span className={`pill pill--${message.status}`}>{message.status.split("_").join(" ")}</span>
+    <article className={`chat-message chat-message--${bubbleTone}`}>
+      <div className="chat-message__avatar" aria-hidden="true">
+        {isAssistantLike ? (
+          <BotAvatarIcon className="chat-message__avatar-icon" />
+        ) : (
+          <UserAvatarIcon className="chat-message__avatar-icon" />
+        )}
       </div>
 
-      <div className="message__body">{renderParagraphs(message.content)}</div>
-
-      {exercise ? (
-        <div className="exercise-panel">
-          <div className="exercise-panel__grid">
-            <section className="exercise-card">
-              <span className="exercise-card__label">Ejercicio detectado</span>
-              <h3>{exercise.extracted_expression ?? "No identificado con claridad"}</h3>
-              <dl className="exercise-card__list">
-                <div>
-                  <dt>Tipo</dt>
-                  <dd>{labelForProblemType(exercise.detected_problem_type)}</dd>
-                </div>
-                <div>
-                  <dt>Estado</dt>
-                  <dd>{labelForExerciseStatus(exercise.status)}</dd>
-                </div>
-                {exercise.variable ? (
-                  <div>
-                    <dt>Variable</dt>
-                    <dd>{exercise.variable}</dd>
-                  </div>
-                ) : null}
-                {exercise.limit_point ? (
-                  <div>
-                    <dt>Punto</dt>
-                    <dd>{exercise.limit_point}</dd>
-                  </div>
-                ) : null}
-              </dl>
-            </section>
-
-            <section className="exercise-card">
-              <span className="exercise-card__label">Solución</span>
-              <h3>{exercise.resolution?.final_result ?? "Sin resultado final"}</h3>
-              {exercise.resolution ? (
-                <p className="exercise-card__muted">Entrada interpretada por SymPy: {exercise.resolution.sympy_input}</p>
-              ) : null}
-              {exercise.ocr_text ? (
-                <p className="exercise-card__muted">Texto OCR: {exercise.ocr_text}</p>
-              ) : null}
-            </section>
+      <div className="chat-message__stack">
+        {shouldShowBody ? (
+          <div className={`chat-bubble chat-bubble--${bubbleTone}`}>
+            <div className="chat-bubble__content">{renderParagraphs(message.content)}</div>
           </div>
+        ) : null}
 
-          {exercise.resolution ? (
-            <section className="exercise-card exercise-card--steps">
-              <span className="exercise-card__label">Pasos base y explicación</span>
-              <ol className="steps-list">
-                {exercise.resolution.steps.map((step, index) => (
-                  <li key={`${step}-${index}`}>{step}</li>
-                ))}
-              </ol>
-              <div className="exercise-card__explanation">{renderParagraphs(exercise.resolution.explanation)}</div>
-              <p className="exercise-card__muted">
-                Fuente de explicación: {exercise.resolution.explanation_source}
-              </p>
-            </section>
-          ) : null}
+        {resolution ? (
+          <section className="solution-card">
+            <h3>Resolucion Paso a Paso:</h3>
 
-          {exercise.parse_notes.length > 0 ? (
-            <div className="exercise-notes">
-              {exercise.parse_notes.map((note, index) => (
-                <span key={`${note}-${index}`} className="exercise-notes__item">
-                  {note}
-                </span>
+            <ol className="solution-card__steps">
+              {resolution.steps.map((step, index) => (
+                <li key={`${step}-${index}`}>{step}</li>
               ))}
-            </div>
-          ) : null}
+            </ol>
 
-          {exercise.error_message ? (
-            <div className="status-banner status-banner--error">{exercise.error_message}</div>
-          ) : null}
-        </div>
-      ) : null}
+            <div className="solution-card__formula">
+              <strong>{exercise?.extracted_expression ?? "Resultado"}</strong>
+              <span>{resolution.final_result}</span>
+            </div>
+
+            <div className="solution-card__explanation">
+              {renderParagraphs(resolution.explanation)}
+            </div>
+
+            {exercise?.error_message ? (
+              <p className="solution-card__error">{exercise.error_message}</p>
+            ) : null}
+          </section>
+        ) : null}
+      </div>
     </article>
   );
 }

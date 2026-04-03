@@ -17,7 +17,13 @@ class OllamaClient:
         self.model = settings.ollama_model
         self.timeout = settings.ollama_timeout_seconds
 
-    def generate(self, *, system_prompt: str, prompt: str) -> str:
+    def generate(
+        self,
+        *,
+        system_prompt: str,
+        prompt: str,
+        temperature: float = 0.2,
+    ) -> str:
         try:
             with httpx.Client(timeout=self.timeout) as client:
                 response = client.post(
@@ -27,7 +33,7 @@ class OllamaClient:
                         "system": system_prompt,
                         "prompt": prompt,
                         "stream": False,
-                        "options": {"temperature": 0.2},
+                        "options": {"temperature": temperature},
                     },
                 )
                 response.raise_for_status()

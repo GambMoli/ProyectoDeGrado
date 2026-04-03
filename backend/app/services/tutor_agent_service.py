@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 AgentAction = Literal[
     "answer_theory",
+    "answer_theory_with_practice",
     "solve_exercise",
     "generate_practice",
     "grade_practice",
@@ -36,6 +37,22 @@ class TutorAgentService:
         "quiero practicar",
         "quiero un ejercicio",
         "quiero intentarlo",
+        "otro ejercicio",
+        "nuevo ejercicio",
+    )
+    _new_task_patterns = (
+        "resuelve",
+        "deriva",
+        "derivada de",
+        "integral de",
+        "lim ",
+        "limite",
+        "explicame",
+        "que es",
+        "que sabes",
+        "como funciona",
+        "quiero cambiar de tema",
+        "cambiando de tema",
     )
     _practice_correction_patterns = (
         "no de",
@@ -43,38 +60,43 @@ class TutorAgentService:
         "eso es de",
         "eso era de",
         "te pedi",
-        "te pedí",
         "repito",
     )
     _theory_patterns = (
         "que sabes",
-        "qué sabes",
         "explicame",
-        "explícame",
         "que es",
-        "qué es",
         "como funciona",
-        "cómo funciona",
         "tema",
         "curso",
         "unidad",
     )
+    _explicit_answer_markers = (
+        "resultado",
+        "respuesta",
+        "creo que",
+        "me dio",
+        "seria",
+        "mi resultado",
+        "mi respuesta",
+    )
     _topic_aliases = (
         ("serie_de_taylor", ("serie de taylor", "taylor")),
         ("newton_raphson", ("newton raphson", "newton-raphson")),
-        ("regula_falsi", ("regula falsi", "falsa posicion", "falsa posición")),
-        ("metodo_de_la_secante", ("metodo de la secante", "método de la secante", "secante")),
+        ("regula_falsi", ("regula falsi", "falsa posicion")),
+        ("metodo_de_la_secante", ("metodo de la secante", "secante")),
         ("punto_fijo", ("punto fijo",)),
-        ("biseccion", ("biseccion", "bisección")),
+        ("biseccion", ("biseccion",)),
         ("lagrange", ("lagrange",)),
-        ("interpolacion_newton", ("interpolacion de newton", "interpolación de newton")),
+        ("interpolacion_newton", ("interpolacion de newton",)),
         ("simpson_1_3", ("simpson 1/3", "simpson 1 3", "simpson un tercio")),
         ("trapecios", ("trapecio", "trapecios")),
         ("derivative", ("derivad",)),
         ("integral", ("integral",)),
-        ("limit", ("limite", "límite", "lim ")),
-        ("equation", ("ecuacion", "ecuación")),
+        ("limit", ("limite", "lim ")),
+        ("equation", ("ecuacion",)),
     )
+    _token_pattern = re.compile(r"[a-z0-9]+")
 
     def __init__(
         self,
@@ -95,23 +117,24 @@ class TutorAgentService:
         conversation_context: list[str],
         agent_state: dict | None,
     ) -> TutorAgentDecision:
+        if not self.ollama_client:
+            raise RuntimeError("OllamaClient no esta configurado.")
+
         state = agent_state or {}
-        if self.ollama_client:
-            decision = self._decide_with_ollama(
+        decision = self._decide_with_ollama(
+            message=message,
+            conversation_context=conversation_context,
+            agent_state=state,
+        )
+        if not decision:
+            decision = self._decide_with_rules(
                 message=message,
                 conversation_context=conversation_context,
                 agent_state=state,
             )
-            if decision:
-                return self._apply_guardrails(
-                    decision=decision,
-                    message=message,
-                    agent_state=state,
-                )
-
-        return self._fallback_decision(
+        return self._apply_guardrails(
+            decision=decision,
             message=message,
-            conversation_context=conversation_context,
             agent_state=state,
         )
 
@@ -138,16 +161,19 @@ Estado del tutor:
 
 Debes decidir una sola accion entre:
 - answer_theory
+- answer_theory_with_practice
 - solve_exercise
 - generate_practice
 - grade_practice
 - ask_clarification
 
 Reglas:
-- Usa grade_practice si hay un ejercicio pendiente y el estudiante esta intentando responderlo.
+- Una practica pendiente no bloquea la conversacion. Si el estudiante cambia de tema o abre una tarea nueva, sigue la nueva intencion.
+- Usa grade_practice solo cuando el mensaje parezca realmente una respuesta al ejercicio pendiente, no por ser simplemente texto matematico.
+- Usa answer_theory_with_practice si el estudiante pide explicacion o teoria y, al mismo tiempo, quiere que le propongas un ejercicio.
 - Usa generate_practice si el estudiante pide que le propongan o le den un ejercicio.
 - Si corrige el tema de una practica pendiente, usa generate_practice con el tema corregido.
-- Usa solve_exercise si esta pidiendo resolver un ejercicio concreto.
+- Usa solve_exercise si esta pidiendo resolver un ejercicio concreto o comparte una nueva expresion para trabajarla.
 - Usa answer_theory si esta preguntando teoria, contenido, definiciones o explicaciones.
 - Usa ask_clarification si falta informacion y no conviene asumir.
 
@@ -162,6 +188,7 @@ Devuelve solo JSON valido con esta forma:
             action = payload.get("action")
             if action not in {
                 "answer_theory",
+                "answer_theory_with_practice",
                 "solve_exercise",
                 "generate_practice",
                 "grade_practice",
@@ -179,14 +206,13 @@ Devuelve solo JSON valido con esta forma:
         except (OllamaClientError, ValueError, json.JSONDecodeError):
             return None
 
-    def _fallback_decision(
+    def _decide_with_rules(
         self,
         *,
         message: str,
         conversation_context: list[str],
         agent_state: dict,
     ) -> TutorAgentDecision:
-        del conversation_context
         normalized = normalize_search_text(message)
         pending_practice = agent_state.get("pending_practice")
         detected_topic = self._detect_topic(normalized)
@@ -198,28 +224,38 @@ Devuelve solo JSON valido con esta forma:
         ):
             return TutorAgentDecision(
                 action="generate_practice",
-                reason="practice_topic_correction",
+                reason="rule_practice_topic_correction",
                 topic=detected_topic,
             )
 
-        if pending_practice and self._looks_like_practice_attempt(normalized):
+        if self._looks_like_mixed_theory_practice_request(normalized):
             return TutorAgentDecision(
-                action="grade_practice",
-                reason="pending_practice_attempt",
-                topic=str(pending_practice.get("topic") or ""),
+                action="answer_theory_with_practice",
+                reason="rule_mixed_theory_practice",
+                topic=detected_topic,
             )
 
         if any(pattern in normalized for pattern in self._practice_patterns):
             return TutorAgentDecision(
                 action="generate_practice",
-                reason="practice_request",
+                reason="rule_practice_request",
                 topic=detected_topic,
             )
 
-        if self._looks_like_theory_query(normalized) and self.knowledge_base_service.has_relevant_context(message):
+        if pending_practice and self._looks_like_practice_attempt(
+            normalized_message=normalized,
+            pending_practice=pending_practice,
+        ):
+            return TutorAgentDecision(
+                action="grade_practice",
+                reason="rule_pending_practice_answer",
+                topic=str(pending_practice.get("topic") or ""),
+            )
+
+        if self._looks_like_theory_query(normalized):
             return TutorAgentDecision(
                 action="answer_theory",
-                reason="theory_query",
+                reason="rule_theory_query",
                 topic=detected_topic,
             )
 
@@ -227,29 +263,15 @@ Devuelve solo JSON valido con esta forma:
             self.parser_service.parse(message)
             return TutorAgentDecision(
                 action="solve_exercise",
-                reason="parser_detected_exercise",
+                reason="rule_parser_detected_exercise",
                 topic=detected_topic,
             )
         except Exception:
             pass
 
-        if self.knowledge_base_service.has_relevant_context(message):
-            return TutorAgentDecision(
-                action="answer_theory",
-                reason="knowledge_match",
-                topic=detected_topic,
-            )
-
-        if pending_practice:
-            return TutorAgentDecision(
-                action="grade_practice",
-                reason="pending_practice_default",
-                topic=str(pending_practice.get("topic") or ""),
-            )
-
         return TutorAgentDecision(
-            action="answer_theory",
-            reason="default_theory_chat",
+            action="ask_clarification",
+            reason="rule_fallback_clarification",
             topic=detected_topic,
         )
 
@@ -275,11 +297,11 @@ Devuelve solo JSON valido con esta forma:
                 topic=detected_topic,
             )
 
-        if pending_practice and self._looks_like_practice_attempt(normalized):
+        if self._looks_like_mixed_theory_practice_request(normalized):
             return TutorAgentDecision(
-                action="grade_practice",
-                reason="guardrail_pending_practice",
-                topic=str(pending_practice.get("topic") or ""),
+                action="answer_theory_with_practice",
+                reason="guardrail_mixed_theory_practice",
+                topic=detected_topic,
             )
 
         if any(pattern in normalized for pattern in self._practice_patterns):
@@ -288,6 +310,44 @@ Devuelve solo JSON valido con esta forma:
                 reason="guardrail_practice_request",
                 topic=detected_topic,
             )
+
+        if pending_practice and self._looks_like_theory_query(normalized):
+            return TutorAgentDecision(
+                action="answer_theory",
+                reason="guardrail_context_switch_theory",
+                topic=detected_topic,
+            )
+
+        if pending_practice and self._looks_like_new_math_task(
+            message=message,
+            normalized_message=normalized,
+            pending_practice=pending_practice,
+        ):
+            return TutorAgentDecision(
+                action="solve_exercise",
+                reason="guardrail_context_switch_new_math",
+                topic=detected_topic,
+            )
+
+        if pending_practice and self._looks_like_practice_attempt(
+            normalized_message=normalized,
+            pending_practice=pending_practice,
+        ):
+            return TutorAgentDecision(
+                action="grade_practice",
+                reason="guardrail_pending_practice",
+                topic=str(pending_practice.get("topic") or ""),
+            )
+
+        if decision.action == "grade_practice" and pending_practice:
+            rerouted = self._reroute_if_pending_practice_does_not_fit(
+                message=message,
+                normalized_message=normalized,
+                pending_practice=pending_practice,
+                detected_topic=detected_topic,
+            )
+            if rerouted:
+                return rerouted
 
         if decision.action == "answer_theory" and not self._looks_like_theory_query(normalized):
             try:
@@ -302,6 +362,47 @@ Devuelve solo JSON valido con esta forma:
 
         return decision
 
+    def _reroute_if_pending_practice_does_not_fit(
+        self,
+        *,
+        message: str,
+        normalized_message: str,
+        pending_practice: dict,
+        detected_topic: str | None,
+    ) -> TutorAgentDecision | None:
+        if self._looks_like_practice_attempt(
+            normalized_message=normalized_message,
+            pending_practice=pending_practice,
+        ):
+            return None
+
+        if self._looks_like_mixed_theory_practice_request(normalized_message):
+            return TutorAgentDecision(
+                action="answer_theory_with_practice",
+                reason="guardrail_reroute_theory_with_practice",
+                topic=detected_topic,
+            )
+
+        if self._looks_like_theory_query(normalized_message):
+            return TutorAgentDecision(
+                action="answer_theory",
+                reason="guardrail_reroute_theory",
+                topic=detected_topic,
+            )
+
+        if self._looks_like_new_math_task(
+            message=message,
+            normalized_message=normalized_message,
+            pending_practice=pending_practice,
+        ):
+            return TutorAgentDecision(
+                action="solve_exercise",
+                reason="guardrail_reroute_new_math",
+                topic=detected_topic,
+            )
+
+        return None
+
     @staticmethod
     def _extract_json(raw: str) -> dict:
         match = re.search(r"\{.*\}", raw, re.DOTALL)
@@ -309,16 +410,57 @@ Devuelve solo JSON valido con esta forma:
             raise ValueError("No JSON object found in agent response.")
         return json.loads(match.group(0))
 
-    @staticmethod
-    def _looks_like_practice_attempt(normalized_message: str) -> bool:
-        if any(
-            token in normalized_message
-            for token in ("resultado", "respuesta", "creo que", "me dio", "seria", "sería")
+    @classmethod
+    def _looks_like_practice_attempt(
+        cls,
+        *,
+        normalized_message: str,
+        pending_practice: dict,
+    ) -> bool:
+        if cls._looks_like_theory_query(normalized_message):
+            return False
+
+        if any(pattern in normalized_message for pattern in cls._practice_patterns):
+            return False
+
+        if any(pattern in normalized_message for pattern in cls._new_task_patterns):
+            return False
+
+        if any(marker in normalized_message for marker in cls._explicit_answer_markers):
+            return True
+
+        expected_answer = str(pending_practice.get("expected_answer") or "")
+        student_tokens = cls._math_tokens(normalized_message)
+        expected_tokens = cls._math_tokens(expected_answer)
+        if not student_tokens or not expected_tokens:
+            return False
+
+        overlap = len(student_tokens.intersection(expected_tokens))
+        student_overlap = overlap / len(student_tokens)
+        expected_overlap = overlap / len(expected_tokens)
+        return student_overlap >= 0.75 and expected_overlap >= 0.5
+
+    def _looks_like_new_math_task(
+        self,
+        *,
+        message: str,
+        normalized_message: str,
+        pending_practice: dict,
+    ) -> bool:
+        if self._looks_like_practice_attempt(
+            normalized_message=normalized_message,
+            pending_practice=pending_practice,
         ):
+            return False
+
+        if self._looks_like_theory_query(normalized_message):
+            return False
+
+        try:
+            self.parser_service.parse(message)
             return True
-        if re.search(r"[=+\-*/^()]", normalized_message) and re.search(r"\d|x|y|z", normalized_message):
-            return True
-        return False
+        except Exception:
+            return False
 
     @classmethod
     def _looks_like_practice_correction(
@@ -348,3 +490,18 @@ Devuelve solo JSON valido con esta forma:
     @classmethod
     def _looks_like_theory_query(cls, normalized_message: str) -> bool:
         return any(pattern in normalized_message for pattern in cls._theory_patterns)
+
+    @classmethod
+    def _looks_like_mixed_theory_practice_request(cls, normalized_message: str) -> bool:
+        return cls._looks_like_theory_query(normalized_message) and any(
+            pattern in normalized_message for pattern in cls._practice_patterns
+        )
+
+    @classmethod
+    def _math_tokens(cls, value: str) -> set[str]:
+        normalized = normalize_search_text(value)
+        return {
+            token
+            for token in cls._token_pattern.findall(normalized)
+            if token not in {"el", "la", "de", "es", "mi", "resultado", "respuesta"}
+        }
