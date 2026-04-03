@@ -32,7 +32,7 @@ class Settings(BaseSettings):
 
     ollama_enabled: bool = False
     ollama_base_url: str = "http://host.docker.internal:11434"
-    ollama_model: str = "llama3.2:3b"
+    ollama_model: str = "deepseek-r1:8b"
     ollama_timeout_seconds: int = 25
 
     ocr_provider: str = "tesseract"
