@@ -69,14 +69,43 @@ class TimeoutFeedbackOllamaClient(FakeOllamaClient):
         return super().generate(system_prompt=system_prompt, prompt=prompt, temperature=temperature)
 
 
+class SemanticStrategyOllamaClient(FakeOllamaClient):
+    def generate(self, *, system_prompt: str, prompt: str, temperature: float = 0.2) -> str:
+        if "planner interno de practica matematica" in system_prompt:
+            return '{"topic":"integral","generator_mode":"symbolic","reason":"semantic_request"}'
+        prompt_lower = prompt.lower()
+        if "generador interno de practica matematica" in system_prompt and "objetivo matematico:" in prompt_lower and "integrales" in prompt_lower:
+            return (
+                '{"mode":"symbolic","raw_input":"integral de x^2 + 1 dx",'
+                '"exercise_text":"Calcula la integral indefinida de la funcion.",'
+                '"hint":"Integra termino a termino y recuerda la constante de integracion."}'
+            )
+        return super().generate(system_prompt=system_prompt, prompt=prompt, temperature=temperature)
+
+
 def test_generate_derivative_practice_creates_pending_state() -> None:
     service = build_practice_service()
 
     generated = service.generate_practice("Proponme un ejercicio de derivadas")
 
-    assert "Deriva la funcion" in generated.text
+    assert "Calcula la derivada de la funcion" in generated.text
     assert generated.state["pending_practice"]["expected_answer"] == "10*x - 4"
     assert generated.state["practice_history"]
+
+
+def test_generate_practice_can_use_semantic_strategy_from_llm() -> None:
+    service = PracticeService(
+        settings=SimpleNamespace(),
+        parser_service=MathParserService(),
+        solver_service=SymPySolverService(),
+        ollama_client=SemanticStrategyOllamaClient(),
+        knowledge_base_service=KnowledgeBaseService(DATASETS_DIR),
+    )
+
+    generated = service.generate_practice("Quiero algo de integracion por partes")
+
+    assert generated.state["pending_practice"]["topic"] == "integral"
+    assert "\\int" in generated.exercise_text
 
 
 def test_generate_taylor_practice_uses_requested_topic() -> None:
@@ -110,6 +139,8 @@ def test_grade_correct_practice_attempt() -> None:
 
     assert graded.is_correct is True
     assert "pending_practice" not in graded.next_state
+    assert graded.next_state["last_practice_context"]["topic"] == "derivative"
+    assert graded.next_state["last_practice_context"]["last_outcome"] == "correct"
     assert graded.next_state["practice_history"]
 
 
@@ -124,6 +155,19 @@ def test_grade_incorrect_practice_attempt_keeps_state() -> None:
 
     assert graded.is_correct is False
     assert "pending_practice" in graded.next_state
+
+
+def test_generate_practice_reuses_recent_topic_for_continuation_requests() -> None:
+    service = build_practice_service()
+    generated = service.generate_practice("Proponme un ejercicio de derivadas")
+    graded = service.grade_attempt(
+        pending_practice=generated.state["pending_practice"],
+        student_message="El resultado es 10x-4",
+    )
+
+    follow_up = service.generate_practice("Ponme otro", current_state=graded.next_state)
+
+    assert follow_up.state["pending_practice"]["topic"] == "derivative"
 
 
 def test_integral_practice_accepts_equivalent_answer_with_constant() -> None:

@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass, field
 
 from app.schemas.enums import ProblemType
-from app.utils.expression_normalizer import extract_candidate_segment, looks_like_math, normalize_text
+from app.utils.expression_normalizer import extract_candidate_segment, looks_like_structured_math, normalize_text
 
 
 class MathParserError(ValueError):
@@ -25,18 +25,48 @@ class ParsedExercise:
 
 
 class MathParserService:
-    _integral_keywords = re.compile(r"\b(integral|integra|integrate|∫)\b", re.IGNORECASE)
+    _integral_keywords = re.compile("\\b(integral|integra|integrate|\u222b)\\b", re.IGNORECASE)
     _derivative_keywords = re.compile(
-        r"\b(derivada|derivative|deriva|d\/d[a-zA-Z])\b",
+        "\\b(derivada|derivative|deriva|d/d[a-zA-Z])\\b",
         re.IGNORECASE,
     )
-    _limit_keywords = re.compile(r"\b(limite|límite|limit|lim)\b", re.IGNORECASE)
-    _simplify_keywords = re.compile(r"\b(simplifica|simplify|reduce)\b", re.IGNORECASE)
-    _equation_keywords = re.compile(r"\b(ecuacion|ecuación|equation|solve|resuelve)\b", re.IGNORECASE)
+    _limit_keywords = re.compile("\\b(limite|l\\u00edmite|limit|lim)\\b", re.IGNORECASE)
+    _limit_context_keywords = re.compile(
+        "(?i)\\b(?:cuando|when)\\s+[a-zA-Z]\\s+(?:tiende\\s+a|tends\\s+to)\\s+[-+*/\\w().]+"
+    )
+    _simplify_keywords = re.compile("\\b(simplifica|simplify|reduce)\\b", re.IGNORECASE)
+    _equation_keywords = re.compile("\\b(ecuacion|ecuaci\\u00f3n|equation|solve|resuelve)\\b", re.IGNORECASE)
+    _leading_instruction_words = re.compile(
+        "(?i)^(?:(?:resuelve|solve|calcula(?:r)?|evaluate|evalua|evaluar|halla|encuentra|determina|obt[e\u00e9]n|obten|simplifica|reduce|muestra)\\b[\\s,:;-]*)+"
+    )
+    _leading_context_words = re.compile(
+        "(?i)^(?:(?:de|del|la|el|los|las|funcion|funci\\u00f3n|expresion|expresi\\u00f3n|valor|ejercicio|problema)\\b[\\s,:;-]*)+"
+    )
+    _leading_ocr_letters = re.compile(
+        "^(?:[A-Za-z]\\s+){4,}(?=(?:\\d|\\(|sin\\b|cos\\b|tan\\b|log\\b|ln\\b|sqrt\\b|exp\\b|pi\\b|[xyztnabc]))"
+    )
+    _trailing_limit_context = re.compile(
+        "(?i)\\s+cuando\\s+[a-zA-Z]\\s+tiende\\s+a\\s+[-+*/\\w().]+\\s*$"
+    )
+    _non_math_words = re.compile("\\b([A-Za-z]{2,})\\b")
+    _allowed_math_words = {
+        "sin",
+        "cos",
+        "tan",
+        "log",
+        "ln",
+        "sqrt",
+        "exp",
+        "pi",
+        "oo",
+        "integral",
+        "lim",
+        "limit",
+    }
 
     def parse(self, raw_text: str) -> ParsedExercise:
         normalized = normalize_text(raw_text)
-        candidate = extract_candidate_segment(normalized)
+        candidate = normalize_text(extract_candidate_segment(raw_text))
         problem_type = self._detect_problem_type(normalized, candidate)
 
         if problem_type == ProblemType.INTEGRAL:
@@ -55,13 +85,13 @@ class MathParserService:
             return ProblemType.DERIVATIVE
         if self._integral_keywords.search(lowered) or re.search(r"\s*d[a-zA-Z]\s*$", candidate):
             return ProblemType.INTEGRAL
-        if self._limit_keywords.search(lowered) or "->" in candidate:
+        if self._limit_keywords.search(lowered) or self._limit_context_keywords.search(lowered) or "->" in candidate:
             return ProblemType.LIMIT
         if "=" in candidate or self._equation_keywords.search(lowered):
             return ProblemType.EQUATION
         if self._simplify_keywords.search(lowered):
             return ProblemType.SIMPLIFICATION
-        if looks_like_math(candidate):
+        if looks_like_structured_math(candidate):
             return ProblemType.SIMPLIFICATION
         raise MathParserError(
             "No detecte un ejercicio matematico claro.",
@@ -71,7 +101,7 @@ class MathParserService:
     def _parse_integral(self, candidate: str, normalized: str) -> ParsedExercise:
         notes = ["Se detecto una integral a partir del texto."]
         expression = candidate
-        expression = re.sub(r"(?i)^.*?(integral|∫)\s*(de|of)?\s*", "", expression).strip()
+        expression = re.sub("(?i)^.*?(integral|\u222b)\\s*(de|of)?\\s*", "", expression).strip()
         expression = expression.lstrip(":").strip()
 
         variable = None
@@ -82,7 +112,7 @@ class MathParserService:
             notes.append(f"Se tomo {variable} como variable de integracion.")
 
         variable_match = re.search(
-            r"(?i)(?:respecto a|with respect to)\s+(?P<var>[a-zA-Z])",
+            "(?i)(?:respecto a|with respect to)\\s+(?P<var>[a-zA-Z])",
             normalized,
         )
         if variable_match and not variable:
@@ -105,7 +135,7 @@ class MathParserService:
         expression = candidate
 
         shorthand_match = re.search(
-            r"(?i)d\s*/\s*d(?P<var>[a-zA-Z])\s*(?P<expr>.+)",
+            "(?i)d\\s*/\\s*d(?P<var>[a-zA-Z])\\s*(?P<expr>.+)",
             expression,
         )
         if shorthand_match:
@@ -114,13 +144,13 @@ class MathParserService:
             notes.append(f"Se detecto la notacion d/d{variable}.")
         else:
             expression = re.sub(
-                r"(?i)^.*?(derivada|derivative|deriva)\s*(de|of)?\s*",
+                "(?i)^.*?(derivada|derivative|deriva)\\s*(de|of)?\\s*",
                 "",
                 expression,
             ).strip()
 
         variable_match = re.search(
-            r"(?i)(?:respecto a|with respect to)\s+(?P<var>[a-zA-Z])",
+            "(?i)(?:respecto a|with respect to)\\s+(?P<var>[a-zA-Z])",
             normalized,
         )
         if variable_match and not variable:
@@ -128,7 +158,7 @@ class MathParserService:
             notes.append(f"Se tomo {variable} como variable de derivacion.")
 
         expression = re.sub(
-            r"(?i)\s*(respecto a|with respect to)\s+[a-zA-Z]\s*$",
+            "(?i)\\s*(respecto a|with respect to)\\s+[a-zA-Z]\\s*$",
             "",
             expression,
         ).strip()
@@ -149,26 +179,36 @@ class MathParserService:
         point = None
 
         arrow_match = re.search(
-            r"(?i)(?:lim(?:ite|it)?\s*)?(?P<var>[a-zA-Z])\s*->\s*(?P<point>[^\s]+)\s+(?P<expr>.+)",
-            expression,
+            "(?i)(?:.*?\\blim(?:ite|it)?\\b\\s*)?(?P<var>[a-zA-Z])\\s*->\\s*(?P<point>[-+*/\\w().]+)\\s*(?:[:,]?\\s*)?(?:de\\s+)?(?P<expr>.+)$",
+            normalized,
         )
         if arrow_match:
             variable = arrow_match.group("var")
-            point = arrow_match.group("point")
+            point = arrow_match.group("point").strip(",:;")
             expression = arrow_match.group("expr")
             notes.append(f"Se detecto el limite cuando {variable} tiende a {point}.")
         else:
             text_match = re.search(
-                r"(?i)cuando\s+(?P<var>[a-zA-Z])\s+tiende\s+a\s+(?P<point>[^\s]+)\s*[:,]?\s*(?P<expr>.+)",
+                "(?i)cuando\\s+(?P<var>[a-zA-Z])\\s+tiende\\s+a\\s+(?P<point>[-+*/\\w().]+)\\s*(?:[:,]?\\s*)?(?:de\\s+)?(?P<expr>.+)$",
                 normalized,
             )
             if text_match:
                 variable = text_match.group("var")
-                point = text_match.group("point")
+                point = text_match.group("point").strip(",:;")
                 expression = text_match.group("expr")
                 notes.append(f"Se detecto el limite cuando {variable} tiende a {point}.")
+            else:
+                reverse_match = re.search(
+                    "(?i)(?P<expr>.+?)\\s+cuando\\s+(?P<var>[a-zA-Z])\\s+tiende\\s+a\\s+(?P<point>[-+*/\\w().]+)\\s*$",
+                    normalized,
+                )
+                if reverse_match:
+                    variable = reverse_match.group("var")
+                    point = reverse_match.group("point").strip(",:;")
+                    expression = reverse_match.group("expr")
+                    notes.append(f"Se detecto el limite cuando {variable} tiende a {point}.")
 
-        expression = re.sub(r"(?i)^.*?\blim(?:ite|it)?\b\s*", "", expression).strip()
+        expression = re.sub("(?i)^.*?\\blim(?:ite|it)?\\b\\s*", "", expression).strip()
         expression = self._cleanup_expression(expression)
         self._ensure_expression(expression)
 
@@ -195,7 +235,7 @@ class MathParserService:
         )
         expression = equation_match.group("eq").strip() if equation_match else candidate.strip()
         expression = re.sub(
-            r"(?i)^.*?(ecuacion|ecuación|equation|solve|resuelve)\s*(de|of|:)?\s*",
+            "(?i)^.*?(ecuacion|ecuaci\\u00f3n|equation|solve|resuelve)\\s*(de|of|:)?\\s*",
             "",
             expression,
         ).strip()
@@ -203,7 +243,7 @@ class MathParserService:
         self._ensure_expression(expression)
 
         variable_match = re.search(
-            r"(?i)(?:para|for)\s+(?P<var>[a-zA-Z])",
+            "(?i)(?:para|for)\\s+(?P<var>[a-zA-Z])",
             normalized,
         )
         variable = variable_match.group("var") if variable_match else None
@@ -219,7 +259,7 @@ class MathParserService:
         notes = ["No se detecto un operador avanzado; se intentara simplificar la expresion."]
         expression = candidate
         expression = re.sub(
-            r"(?i)^.*?(simplifica|simplify|reduce)\s*(de|of|:)?\s*",
+            "(?i)^.*?(simplifica|simplify|reduce)\\s*(de|of|:)?\\s*",
             "",
             expression,
         ).strip()
@@ -232,15 +272,37 @@ class MathParserService:
             notes=notes,
         )
 
-    @staticmethod
-    def _cleanup_expression(expression: str) -> str:
-        cleaned = expression.strip().strip(" ?!.,;:")
-        cleaned = cleaned.replace("∫", "")
-        return cleaned.strip()
+    @classmethod
+    def _cleanup_expression(cls, expression: str) -> str:
+        cleaned = normalize_text(expression).strip().strip(" ?!.,;:")
+        cleaned = cleaned.replace("\u222b", "")
+        cleaned = cls._leading_ocr_letters.sub("", cleaned).strip()
+
+        previous = None
+        while previous != cleaned:
+            previous = cleaned
+            cleaned = cls._leading_instruction_words.sub("", cleaned).strip()
+            cleaned = cls._leading_context_words.sub("", cleaned).strip()
+
+        cleaned = cls._trailing_limit_context.sub("", cleaned).strip()
+        cleaned = cls._strip_non_math_words(cleaned)
+        cleaned = re.sub(r"\s+", " ", cleaned)
+        return cleaned.strip(" ?!.,;:")
+
+    @classmethod
+    def _strip_non_math_words(cls, expression: str) -> str:
+        def replace_word(match: re.Match[str]) -> str:
+            token = match.group(1)
+            lowered = token.lower()
+            if lowered in cls._allowed_math_words or len(token) == 1:
+                return token
+            return ""
+
+        return cls._non_math_words.sub(replace_word, expression)
 
     @staticmethod
     def _ensure_expression(expression: str) -> None:
-        if not expression or not looks_like_math(expression):
+        if not expression or not looks_like_structured_math(expression):
             raise MathParserError(
                 "No pude extraer una expresion matematica valida. Intenta escribir el ejercicio de forma mas directa.",
                 code="invalid_expression",

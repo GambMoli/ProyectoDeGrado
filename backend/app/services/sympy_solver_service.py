@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sympy import E, Derivative, Eq, Integral, Limit, Symbol, cos, diff, exp, integrate, limit, log, pi
+from sympy import E, Derivative, Eq, Integral, Limit, Symbol, cos, diff, exp, integrate, latex, limit, log, pi
 from sympy import simplify, sin, solve, sqrt, tan
 from sympy.parsing.sympy_parser import (
     convert_xor,
@@ -81,10 +81,10 @@ class SymPySolverService:
             final_result=str(result),
             variable=str(variable),
             steps=[
-                f"Se interpreto la funcion como {expr}.",
-                f"Se tomo {variable} como variable de derivacion.",
-                f"Se calculo diff({expr}, {variable}).",
-                f"El resultado simplificado es {result}.",
+                f"Se identifica la funcion como \\({self._to_latex(expr)}\\).",
+                f"La variable de derivacion es \\({self._to_latex(variable)}\\).",
+                f"Aplicamos la derivada con respecto a \\({self._to_latex(variable)}\\).",
+                f"El resultado obtenido es \\({self._to_latex(result)}\\).",
             ],
         )
 
@@ -98,10 +98,10 @@ class SymPySolverService:
             final_result=str(result),
             variable=str(variable),
             steps=[
-                f"Se interpreto el integrando como {expr}.",
-                f"Se tomo {variable} como variable de integracion.",
-                f"Se calculo integrate({expr}, {variable}).",
-                f"La antiderivada obtenida es {result}.",
+                f"Se identifica el integrando como \\({self._to_latex(expr)}\\).",
+                f"La variable de integracion es \\({self._to_latex(variable)}\\).",
+                f"Buscamos una antiderivada respecto de \\({self._to_latex(variable)}\\).",
+                f"Una antiderivada es \\({self._to_latex(result)}\\).",
             ],
         )
 
@@ -119,10 +119,10 @@ class SymPySolverService:
             final_result=str(result),
             variable=str(variable),
             steps=[
-                f"Se interpreto la expresion como {expr}.",
-                f"Se evaluo el limite cuando {variable} tiende a {point}.",
-                f"Se calculo limit({expr}, {variable}, {point}).",
-                f"El valor del limite es {result}.",
+                f"Se identifica la expresion como \\({self._to_latex(expr)}\\).",
+                f"Evaluamos el limite cuando \\({self._to_latex(variable)} \\to {self._to_latex(point)}\\).",
+                f"Analizamos el comportamiento de \\({self._to_latex(expr)}\\) cerca de ese punto.",
+                f"El valor del limite es \\({self._to_latex(result)}\\).",
             ],
         )
 
@@ -151,10 +151,10 @@ class SymPySolverService:
             final_result=final_result,
             variable=str(variable),
             steps=[
-                f"Se interpreto la ecuacion como {left_expr} = {right_expr}.",
-                f"Se eligio {variable} como variable a despejar.",
-                f"Se resolvio solve(Eq({left_expr}, {right_expr}), {variable}).",
-                f"Las soluciones encontradas fueron: {final_result}.",
+                f"Se identifica la ecuacion como \\({self._to_latex(left_expr)} = {self._to_latex(right_expr)}\\).",
+                f"La variable a despejar es \\({self._to_latex(variable)}\\).",
+                "Aplicamos despeje simbolico para encontrar los valores que satisfacen la igualdad.",
+                f"Las soluciones encontradas fueron \\({self._to_latex_text(final_result)}\\).",
             ],
         )
 
@@ -166,9 +166,9 @@ class SymPySolverService:
             sympy_input=str(expr),
             final_result=str(result),
             steps=[
-                f"Se interpreto la expresion como {expr}.",
-                "Se combinaron terminos y operaciones equivalentes con SymPy.",
-                f"La forma simplificada es {result}.",
+                f"Se identifica la expresion como \\({self._to_latex(expr)}\\).",
+                "Se combinan terminos y operaciones equivalentes.",
+                f"La forma simplificada es \\({self._to_latex(result)}\\).",
             ],
         )
 
@@ -192,3 +192,17 @@ class SymPySolverService:
         if free_symbols:
             return free_symbols[0]
         return Symbol("x")
+
+    @staticmethod
+    def _to_latex(value) -> str:
+        try:
+            return latex(value)
+        except Exception:
+            return str(value).replace("**", "^")
+
+    @classmethod
+    def _to_latex_text(cls, value: str) -> str:
+        if "=" in value:
+            left, right = value.split("=", maxsplit=1)
+            return f"{left.strip()} = {right.strip().replace('**', '^')}"
+        return value.replace("**", "^")

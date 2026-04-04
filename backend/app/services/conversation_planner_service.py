@@ -18,17 +18,45 @@ PlanAction = Literal[
     "answer_theory",
     "solve_exercise",
     "generate_practice",
+    "explain_practice_context",
     "grade_practice",
     "ask_clarification",
 ]
 
 DetailLevel = Literal["auto", "brief", "detailed"]
+PlannerIntent = Literal[
+    "theory_request",
+    "practice_request",
+    "mixed_theory_practice",
+    "solve_new_problem",
+    "grade_active_practice",
+    "explain_practice_context",
+    "clarify",
+]
+PlannerTarget = Literal[
+    "active_practice",
+    "recent_practice",
+    "new_problem",
+    "new_topic",
+    "general_curriculum",
+    "unknown",
+]
 
 
 @dataclass(slots=True)
 class ConversationPlan:
     actions: list[PlanAction]
     reason: str
+    topic: str | None = None
+    detail_level: DetailLevel = "auto"
+
+
+@dataclass(slots=True)
+class SemanticPlannerDecision:
+    intent: PlannerIntent
+    target: PlannerTarget
+    reason: str
+    confidence: float
     topic: str | None = None
     detail_level: DetailLevel = "auto"
 
@@ -93,6 +121,35 @@ class ConversationPlannerService:
         "te pedi",
         "repito",
     )
+    _pending_explanation_markers = (
+        "explicame",
+        "explicarme",
+        "explicar",
+        "paso a paso",
+        "paso por paso",
+        "procedimiento",
+        "como se hace",
+        "como seria",
+        "guiame",
+        "desarrolla",
+    )
+    _pending_reference_markers = (
+        "ese ejercicio",
+        "este ejercicio",
+        "el ejercicio",
+        "esa integral",
+        "esta integral",
+        "esa derivada",
+        "esta derivada",
+        "ese limite",
+        "este limite",
+        "esa ecuacion",
+        "esta ecuacion",
+        "ese problema",
+        "este problema",
+        "la solucion",
+        "la respuesta",
+    )
     _topic_aliases = (
         ("serie_de_taylor", ("serie de taylor", "taylor")),
         ("newton_raphson", ("newton raphson", "newton-raphson")),
@@ -114,8 +171,26 @@ class ConversationPlannerService:
         "answer_theory",
         "solve_exercise",
         "generate_practice",
+        "explain_practice_context",
         "grade_practice",
         "ask_clarification",
+    )
+    _allowed_intents: tuple[PlannerIntent, ...] = (
+        "theory_request",
+        "practice_request",
+        "mixed_theory_practice",
+        "solve_new_problem",
+        "grade_active_practice",
+        "explain_practice_context",
+        "clarify",
+    )
+    _allowed_targets: tuple[PlannerTarget, ...] = (
+        "active_practice",
+        "recent_practice",
+        "new_problem",
+        "new_topic",
+        "general_curriculum",
+        "unknown",
     )
 
     def __init__(
@@ -156,18 +231,105 @@ class ConversationPlannerService:
             )
 
         state = agent_state or {}
+        contextual_plan = self._plan_from_existing_practice_context(
+            message=message,
+            conversation_context=conversation_context,
+            agent_state=state,
+        )
+        if contextual_plan:
+            return contextual_plan
+
         planned = self._plan_with_ollama(
             message=message,
             conversation_context=conversation_context,
             agent_state=state,
         )
         if planned:
-            return self._apply_guardrails(
+            plan = self._apply_guardrails(
                 plan=planned,
                 message=message,
                 agent_state=state,
             )
+            recovered = self._recover_practice_follow_up_with_ollama(
+                current_plan=plan,
+                message=message,
+                conversation_context=conversation_context,
+                agent_state=state,
+            )
+            if recovered:
+                return recovered
+            return plan
         return self._plan_with_rules(message=message, agent_state=state)
+
+    def _plan_from_existing_practice_context(
+        self,
+        *,
+        message: str,
+        conversation_context: list[str],
+        agent_state: dict,
+    ) -> ConversationPlan | None:
+        if not self.ollama_client or not self._has_practice_context(agent_state):
+            return None
+
+        history = "\n".join(conversation_context) if conversation_context else "Sin contexto previo relevante."
+        prompt = f"""
+Eres un resolutor semantico del contexto de practica de un tutor matematico.
+
+Hay una practica activa o reciente en la conversacion. Tu trabajo es decidir si el mensaje actual:
+- continua ese mismo ejercicio para explicarlo,
+- entrega un intento de respuesta,
+- abre una pregunta teorica,
+- pide otra practica,
+- o trae un problema nuevo.
+
+Mensaje actual:
+{message}
+
+Contexto reciente:
+{history}
+
+Estado pedagogico:
+{json.dumps(agent_state, ensure_ascii=False)}
+
+Si el estudiante esta pidiendo ayuda, desarrollo, guia o procedimiento del ejercicio activo o reciente, devuelve explain_practice_context.
+Si esta entregando una respuesta al ejercicio activo, devuelve grade_practice.
+Si cambia claramente de objetivo, devuelve answer_theory, generate_practice o solve_exercise segun corresponda.
+No te bases en palabras exactas: usa la continuidad conversacional y el estado.
+
+Devuelve solo JSON valido:
+{{
+  "actions":["explain_practice_context"],
+  "reason":"continues current exercise",
+  "topic":"integral",
+  "detail_level":"detailed",
+  "confidence":0.91
+}}
+""".strip()
+
+        try:
+            raw = self.ollama_client.generate(
+                system_prompt="Eres un planner interno. Devuelves solo JSON valido.",
+                prompt=prompt,
+                temperature=0.1,
+            )
+            payload = self._extract_json(raw)
+        except (OllamaClientError, ValueError, json.JSONDecodeError):
+            return None
+
+        actions = self._normalize_actions(payload.get("actions"))
+        if not actions:
+            return None
+
+        confidence = self._normalize_confidence(payload.get("confidence"))
+        if confidence < 0.6:
+            return None
+
+        return ConversationPlan(
+            actions=actions,
+            reason=f"contextual_practice_{payload.get('reason') or 'semantic'}",
+            topic=str(payload.get("topic")) if payload.get("topic") is not None else None,
+            detail_level=self._normalize_detail_level(payload.get("detail_level")),
+        )
 
     def _plan_with_ollama(
         self,
@@ -180,55 +342,16 @@ class ConversationPlannerService:
             return None
 
         history = "\n".join(conversation_context) if conversation_context else "Sin contexto previo relevante."
-        prompt = f"""
-Eres el planner interno de un tutor matematico universitario.
-
-Mensaje actual:
-{message}
-
-Contexto reciente:
-{history}
-
-Estado pedagogico actual:
-{json.dumps(agent_state, ensure_ascii=False)}
-
-Debes decidir que herramientas conviene usar antes de responder.
-Puedes devolver una o varias acciones, en el orden en que deban ejecutarse.
-
-Acciones permitidas:
-- answer_theory
-- solve_exercise
-- generate_practice
-- grade_practice
-- ask_clarification
-
-Reglas de planificacion:
-- Una practica pendiente es contexto, no una carcel. Si el estudiante cambia de tema, sigue la nueva intencion.
-- Usa grade_practice solo cuando el mensaje parezca realmente un intento de respuesta al ejercicio pendiente.
-- Si el mensaje mezcla explicacion y practica, devuelve ["answer_theory","generate_practice"].
-- Si el mensaje pide solo practica, incluso de forma indirecta o coloquial, devuelve ["generate_practice"].
-- Si el mensaje pide resolver un ejercicio concreto o comparte una expresion para trabajarla, devuelve ["solve_exercise"].
-- Si el mensaje pide teoria, definiciones, comparaciones o repaso, incluye ["answer_theory"].
-- Si falta informacion importante, usa ["ask_clarification"].
-
-Ejemplos:
-- "Asi esta bien, podrias darme un ejercicio de calculo 2" -> {{"actions":["generate_practice"],"reason":"course_level_practice","topic":"calculo_2","detail_level":"auto"}}
-- "Dime que sabes de derivadas y proponme un ejercicio" -> {{"actions":["answer_theory","generate_practice"],"reason":"mixed_theory_practice","topic":"derivative","detail_level":"auto"}}
-- Si hay una practica de derivadas pendiente y el estudiante dice "6x+2" -> {{"actions":["grade_practice"],"reason":"practice_attempt","topic":"derivative","detail_level":"auto"}}
-- Si hay una practica pendiente y el estudiante escribe "Resuelve x^2 + 3*x = 10" -> {{"actions":["solve_exercise"],"reason":"new_math_task","topic":"equation","detail_level":"auto"}}
-
-Tambien devuelve:
-- reason: una etiqueta corta
-- topic: el tema detectado si existe
-- detail_level: "brief", "detailed" o "auto"
-
-Devuelve solo JSON valido con esta forma:
-{{"actions":["answer_theory","generate_practice"],"reason":"mixed_theory_practice","topic":"derivative","detail_level":"auto"}}
-""".strip()
+        prompt = self._build_semantic_prompt(
+            message=message,
+            conversation_history=history,
+            agent_state=agent_state,
+        )
         try:
             raw = self.ollama_client.generate(
                 system_prompt="Eres un planner interno. Devuelves solo JSON valido.",
                 prompt=prompt,
+                temperature=0.1,
             )
             payload = self._extract_json(raw)
         except (OllamaClientError, ValueError, json.JSONDecodeError):
@@ -236,6 +359,9 @@ Devuelve solo JSON valido con esta forma:
 
         actions = self._normalize_actions(payload.get("actions"))
         if not actions:
+            semantic_plan = self._plan_from_semantic_payload(payload)
+            if semantic_plan:
+                return semantic_plan
             return None
 
         detail_level = self._normalize_detail_level(payload.get("detail_level"))
@@ -245,9 +371,259 @@ Devuelve solo JSON valido con esta forma:
 
         return ConversationPlan(
             actions=actions,
-            reason=str(payload.get("reason") or "llm_planner"),
+            reason=str(payload.get("reason") or "llm_planner_legacy"),
             topic=topic,
             detail_level=detail_level,
+        )
+
+    def _build_semantic_prompt(
+        self,
+        *,
+        message: str,
+        conversation_history: str,
+        agent_state: dict,
+    ) -> str:
+        active_practice_summary = self._practice_context_summary(agent_state, "pending_practice")
+        recent_practice_summary = self._practice_context_summary(agent_state, "last_practice_context")
+        return f"""
+Eres el planner interno de un tutor matematico universitario.
+
+Tu trabajo es inferir la intencion semantica del estudiante, no reaccionar a palabras exactas.
+Debes usar el mensaje actual, el contexto reciente y el estado pedagogico para decidir que quiere hacer el estudiante.
+
+Mensaje actual:
+{message}
+
+Contexto reciente:
+{conversation_history}
+
+Estado pedagogico actual:
+{json.dumps(agent_state, ensure_ascii=False)}
+
+Contexto de practica activa:
+{active_practice_summary}
+
+Contexto de practica reciente:
+{recent_practice_summary}
+
+Clasifica el mensaje en una sola intencion principal:
+- theory_request
+- practice_request
+- mixed_theory_practice
+- solve_new_problem
+- grade_active_practice
+- explain_practice_context
+- clarify
+
+Y en un objetivo principal:
+- active_practice
+- recent_practice
+- new_problem
+- new_topic
+- general_curriculum
+- unknown
+
+Guia semantica:
+- Si el estudiante quiere que le propongan un ejercicio, la intencion es practice_request aunque no use palabras exactas.
+- Si quiere que le expliques el ejercicio activo o el ejercicio que acaban de resolver/corregir, la intencion es explain_practice_context.
+- Si parece que esta entregando su resultado al ejercicio activo, la intencion es grade_active_practice.
+- Si trae un problema nuevo concreto para resolver, la intencion es solve_new_problem.
+- Si pregunta teoria o contenido, la intencion es theory_request.
+- Si mezcla repaso y practica, usa mixed_theory_practice.
+- Si el tutor acaba de ofrecer explicar el mismo ejercicio y el estudiante acepta o pide seguir, eso sigue siendo explain_practice_context aunque el mensaje sea corto.
+- Usa clarify solo si de verdad no puedes inferir el objetivo.
+
+Ejemplos:
+- "Dame un ejercicio de integrales" -> {{"intent":"practice_request","target":"new_topic","topic":"integral","detail_level":"auto","confidence":0.93,"reason":"wants a new practice exercise"}}
+- "Puedes explicarme ese ejercicio paso por paso?" con practica activa -> {{"intent":"explain_practice_context","target":"active_practice","topic":"integral","detail_level":"detailed","confidence":0.95,"reason":"asks to walk through the active exercise"}}
+- "No supe resolverlo, podrias hacerme el paso por paso?" con practica activa -> {{"intent":"explain_practice_context","target":"active_practice","topic":"derivative","detail_level":"detailed","confidence":0.94,"reason":"needs guided walkthrough of the current exercise"}}
+- "Si, dame el paso a paso" despues de que el tutor ofrecio explicarlo y ya no hay practica activa -> {{"intent":"explain_practice_context","target":"recent_practice","topic":"integral","detail_level":"detailed","confidence":0.93,"reason":"accepts walkthrough of the recently completed exercise"}}
+- "El ejercicio anterior no lo supe resolver, dame el paso por paso." -> {{"intent":"explain_practice_context","target":"recent_practice","topic":"derivative","detail_level":"detailed","confidence":0.92,"reason":"asks to revisit the previous exercise"}}
+- "x^3/3 + 2x^2 + x + C" con practica activa -> {{"intent":"grade_active_practice","target":"active_practice","topic":"integral","detail_level":"auto","confidence":0.88,"reason":"looks like an answer attempt"}}
+- "Resuelve la integral de x^2 + 1 dx" -> {{"intent":"solve_new_problem","target":"new_problem","topic":"integral","detail_level":"detailed","confidence":0.97,"reason":"explicit new math problem"}}
+- "Que sabes de derivadas y proponme un ejercicio" -> {{"intent":"mixed_theory_practice","target":"new_topic","topic":"derivative","detail_level":"auto","confidence":0.96,"reason":"asks for explanation plus practice"}}
+
+Devuelve solo JSON valido con esta forma:
+{{
+  "intent":"practice_request",
+  "target":"new_topic",
+  "topic":"integral",
+  "detail_level":"auto",
+  "confidence":0.93,
+  "reason":"..."
+}}
+""".strip()
+
+    def _recover_practice_follow_up_with_ollama(
+        self,
+        *,
+        current_plan: ConversationPlan,
+        message: str,
+        conversation_context: list[str],
+        agent_state: dict,
+    ) -> ConversationPlan | None:
+        normalized_message = normalize_search_text(message)
+        if not self.ollama_client or current_plan.actions not in (
+            ["ask_clarification"],
+            ["answer_theory"],
+            ["generate_practice"],
+            ["solve_exercise"],
+        ):
+            return None
+
+        if not self._has_practice_context(agent_state):
+            return None
+
+        if current_plan.actions == ["answer_theory"] and self._looks_like_theory_query(normalized_message):
+            return None
+
+        history = "\n".join(conversation_context) if conversation_context else "Sin contexto previo relevante."
+        prompt = f"""
+Eres un resolutor interno para continuaciones de una practica matematica.
+
+Hay una practica activa o reciente asociada a esta conversacion.
+Decide si el mensaje actual continua ese ejercicio o si realmente abre otra tarea.
+
+Mensaje actual:
+{message}
+
+Contexto reciente:
+{history}
+
+Estado pedagogico:
+{json.dumps(agent_state, ensure_ascii=False)}
+
+Si el mensaje retoma el mismo ejercicio activo o reciente, favorece:
+- explain_practice_context
+- grade_practice
+
+Si claramente cambia de objetivo, usa una de:
+- generate_practice
+- answer_theory
+- solve_exercise
+- ask_clarification
+
+No te bases en palabras exactas. Usa el hilo conversacional.
+
+Devuelve solo JSON valido:
+{{
+  "actions":["explain_practice_context"],
+  "reason":"continues recently completed exercise",
+  "topic":"integral",
+  "detail_level":"detailed"
+}}
+""".strip()
+        try:
+            raw = self.ollama_client.generate(
+                system_prompt="Eres un planner interno. Devuelves solo JSON valido.",
+                prompt=prompt,
+                temperature=0.1,
+            )
+            payload = self._extract_json(raw)
+        except (OllamaClientError, ValueError, json.JSONDecodeError):
+            return None
+
+        actions = self._normalize_actions(payload.get("actions"))
+        if not actions:
+            return None
+
+        return ConversationPlan(
+            actions=actions,
+            reason=f"practice_follow_up_{payload.get('reason') or 'semantic_recovery'}",
+            topic=str(payload.get("topic")) if payload.get("topic") is not None else None,
+            detail_level=self._normalize_detail_level(payload.get("detail_level")),
+        )
+
+    def _plan_from_semantic_payload(self, payload: dict) -> ConversationPlan | None:
+        intent = self._normalize_intent(payload.get("intent"))
+        target = self._normalize_target(payload.get("target"))
+        if intent not in self._allowed_intents or target not in self._allowed_targets:
+            return None
+
+        topic = payload.get("topic")
+        if topic is not None:
+            topic = str(topic)
+        detail_level = self._normalize_detail_level(payload.get("detail_level"))
+        confidence = self._normalize_confidence(payload.get("confidence"))
+        reason = str(payload.get("reason") or intent)
+        semantic_decision = SemanticPlannerDecision(
+            intent=intent,
+            target=target,
+            reason=reason,
+            confidence=confidence,
+            topic=topic,
+            detail_level=detail_level,
+        )
+        return self._semantic_decision_to_plan(semantic_decision)
+
+    def _semantic_decision_to_plan(self, decision: SemanticPlannerDecision) -> ConversationPlan:
+        if decision.intent == "mixed_theory_practice":
+            return ConversationPlan(
+                actions=["answer_theory", "generate_practice"],
+                reason=f"semantic_{decision.reason}",
+                topic=decision.topic,
+                detail_level=decision.detail_level,
+            )
+        if decision.intent == "practice_request":
+            return ConversationPlan(
+                actions=["generate_practice"],
+                reason=f"semantic_{decision.reason}",
+                topic=decision.topic,
+                detail_level=decision.detail_level,
+            )
+        if decision.intent == "explain_practice_context":
+            return ConversationPlan(
+                actions=["explain_practice_context"],
+                reason=f"semantic_{decision.reason}",
+                topic=decision.topic,
+                detail_level="detailed",
+            )
+        if decision.intent == "grade_active_practice":
+            return ConversationPlan(
+                actions=["grade_practice"],
+                reason=f"semantic_{decision.reason}",
+                topic=decision.topic,
+                detail_level=decision.detail_level,
+            )
+        if decision.intent == "solve_new_problem":
+            return ConversationPlan(
+                actions=["solve_exercise"],
+                reason=f"semantic_{decision.reason}",
+                topic=decision.topic,
+                detail_level=decision.detail_level,
+            )
+        if decision.intent == "theory_request":
+            return ConversationPlan(
+                actions=["answer_theory"],
+                reason=f"semantic_{decision.reason}",
+                topic=decision.topic,
+                detail_level=decision.detail_level,
+            )
+        return ConversationPlan(
+            actions=["ask_clarification"],
+            reason=f"semantic_{decision.reason}",
+            topic=decision.topic,
+            detail_level=decision.detail_level,
+        )
+
+    @staticmethod
+    def _practice_context_summary(agent_state: dict, key: str) -> str:
+        practice_context = dict(agent_state or {}).get(key) or {}
+        if not practice_context:
+            if key == "pending_practice":
+                return "No hay practica activa."
+            return "No hay practica reciente."
+        return json.dumps(
+            {
+                "topic": practice_context.get("topic"),
+                "problem_type": practice_context.get("problem_type"),
+                "exercise_text": practice_context.get("exercise_text"),
+                "expected_answer": practice_context.get("expected_answer"),
+                "attempts": practice_context.get("attempts", 0),
+                "last_outcome": practice_context.get("last_outcome"),
+                "status": practice_context.get("status"),
+            },
+            ensure_ascii=False,
         )
 
     def _plan_with_rules(
@@ -257,12 +633,12 @@ Devuelve solo JSON valido con esta forma:
         agent_state: dict,
     ) -> ConversationPlan:
         normalized = normalize_search_text(message)
-        pending_practice = agent_state.get("pending_practice")
+        active_practice = agent_state.get("pending_practice")
         detected_topic = self._detect_topic(normalized)
 
-        if pending_practice and self._looks_like_practice_correction(
+        if active_practice and self._looks_like_practice_correction(
             normalized_message=normalized,
-            pending_topic=str(pending_practice.get("topic") or ""),
+            pending_topic=str(active_practice.get("topic") or ""),
             detected_topic=detected_topic,
         ):
             return ConversationPlan(
@@ -280,14 +656,14 @@ Devuelve solo JSON valido con esta forma:
                 detail_level=self._detect_detail_level(normalized),
             )
 
-        if pending_practice and self._looks_like_practice_attempt(
+        if active_practice and self._looks_like_practice_attempt(
             normalized_message=normalized,
-            pending_practice=pending_practice,
+            pending_practice=active_practice,
         ):
             return ConversationPlan(
                 actions=["grade_practice"],
-                reason="rule_pending_practice_answer",
-                topic=str(pending_practice.get("topic") or ""),
+                reason="rule_active_practice_answer",
+                topic=str(active_practice.get("topic") or ""),
                 detail_level=self._detect_detail_level(normalized),
             )
 
@@ -338,13 +714,13 @@ Devuelve solo JSON valido con esta forma:
         agent_state: dict,
     ) -> ConversationPlan:
         normalized = normalize_search_text(message)
-        pending_practice = agent_state.get("pending_practice")
+        active_practice = agent_state.get("pending_practice")
         detected_topic = self._detect_topic(normalized)
         detail_level = plan.detail_level
 
-        if pending_practice and self._looks_like_practice_correction(
+        if active_practice and self._looks_like_practice_correction(
             normalized_message=normalized,
-            pending_topic=str(pending_practice.get("topic") or ""),
+            pending_topic=str(active_practice.get("topic") or ""),
             detected_topic=detected_topic,
         ):
             return ConversationPlan(
@@ -390,18 +766,18 @@ Devuelve solo JSON valido con esta forma:
                 detail_level=detail_level,
             )
 
-        if pending_practice and self._looks_like_practice_attempt(
+        if active_practice and self._looks_like_practice_attempt(
             normalized_message=normalized,
-            pending_practice=pending_practice,
+            pending_practice=active_practice,
         ):
             return ConversationPlan(
                 actions=["grade_practice"],
-                reason="guardrail_pending_practice",
-                topic=str(pending_practice.get("topic") or ""),
+                reason="guardrail_active_practice",
+                topic=str(active_practice.get("topic") or ""),
                 detail_level=detail_level,
             )
 
-        if pending_practice and self._looks_like_theory_query(normalized):
+        if active_practice and self._looks_like_theory_query(normalized):
             return ConversationPlan(
                 actions=["answer_theory"],
                 reason="guardrail_context_switch_theory",
@@ -409,10 +785,10 @@ Devuelve solo JSON valido con esta forma:
                 detail_level=detail_level,
             )
 
-        if pending_practice and self._looks_like_new_math_task(
+        if active_practice and self._looks_like_new_math_task(
             message=message,
             normalized_message=normalized,
-            pending_practice=pending_practice,
+            pending_practice=active_practice,
         ):
             return ConversationPlan(
                 actions=["solve_exercise"],
@@ -448,6 +824,35 @@ Devuelve solo JSON valido con esta forma:
         if raw_value in {"brief", "detailed", "auto"}:
             return raw_value
         return "auto"
+
+    @classmethod
+    def _normalize_intent(cls, raw_value: object) -> PlannerIntent | None:
+        legacy_map = {
+            "grade_pending_practice": "grade_active_practice",
+            "explain_pending_practice": "explain_practice_context",
+        }
+        normalized = legacy_map.get(str(raw_value), raw_value)
+        if normalized in cls._allowed_intents:
+            return normalized
+        return None
+
+    @classmethod
+    def _normalize_target(cls, raw_value: object) -> PlannerTarget | None:
+        legacy_map = {
+            "pending_practice": "active_practice",
+        }
+        normalized = legacy_map.get(str(raw_value), raw_value)
+        if normalized in cls._allowed_targets:
+            return normalized
+        return None
+
+    @staticmethod
+    def _normalize_confidence(raw_value: object) -> float:
+        try:
+            confidence = float(raw_value)
+        except (TypeError, ValueError):
+            return 0.0
+        return max(0.0, min(1.0, confidence))
 
     @classmethod
     def _looks_like_mixed_theory_practice_request(cls, normalized_message: str) -> bool:
@@ -527,6 +932,14 @@ Devuelve solo JSON valido con esta forma:
             return False
         return any(pattern in normalized_message for pattern in cls._practice_correction_patterns)
 
+    @classmethod
+    def _looks_like_pending_practice_explanation_request(cls, normalized_message: str) -> bool:
+        if not any(marker in normalized_message for marker in cls._pending_explanation_markers):
+            return False
+        return any(marker in normalized_message for marker in cls._pending_reference_markers) or any(
+            marker in normalized_message for marker in ("paso a paso", "paso por paso", "procedimiento")
+        )
+
     @staticmethod
     def _contains_explicit_math_task(message: str) -> bool:
         normalized = normalize_search_text(message)
@@ -552,6 +965,11 @@ Devuelve solo JSON valido con esta forma:
             return True
 
         return bool(self.knowledge_base_service.search(message, limit=1))
+
+    @staticmethod
+    def _has_practice_context(agent_state: dict) -> bool:
+        state = dict(agent_state or {})
+        return bool(state.get("pending_practice") or state.get("last_practice_context"))
 
     @classmethod
     def _detect_detail_level(cls, normalized_message: str) -> DetailLevel:

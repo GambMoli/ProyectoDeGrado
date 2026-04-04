@@ -8,6 +8,7 @@ from app.core.config import Settings, get_settings
 from app.db.session import get_db
 from app.repositories.conversation_repository import ConversationRepository
 from app.services.conversation_planner_service import ConversationPlannerService
+from app.services.conversation_orchestrator_service import ConversationOrchestratorService
 from app.services.conversation_service import ConversationService
 from app.services.explanation_service import ExplanationService
 from app.services.knowledge_base_service import KnowledgeBaseService
@@ -48,6 +49,10 @@ def get_conversation_service() -> ConversationService:
         parser_service=parser_service,
         ollama_client=ollama_client,
     )
+    conversation_orchestrator_service = ConversationOrchestratorService(
+        settings=settings,
+        ollama_client=ollama_client,
+    )
     response_composer_service = ResponseComposerService(settings, ollama_client)
     topic_explanation_service = TopicExplanationService(
         settings,
@@ -61,6 +66,7 @@ def get_conversation_service() -> ConversationService:
         explanation_service=explanation_service,
         ocr_service=ocr_service,
         practice_service=practice_service,
+        conversation_orchestrator_service=conversation_orchestrator_service,
         conversation_planner_service=conversation_planner_service,
         response_composer_service=response_composer_service,
         topic_explanation_service=topic_explanation_service,

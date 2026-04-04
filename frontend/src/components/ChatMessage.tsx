@@ -1,16 +1,9 @@
 import type { Message } from "../types/api";
 import { BotAvatarIcon, UserAvatarIcon } from "./Icons";
+import { MathContent, MathFormula } from "./MathContent";
 
 interface ChatMessageProps {
   message: Message;
-}
-
-function renderParagraphs(content: string) {
-  return content
-    .split(/\n{2,}|\n/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean)
-    .map((paragraph, index) => <p key={`${paragraph}-${index}`}>{paragraph}</p>);
 }
 
 export function ChatMessage({ message }: ChatMessageProps) {
@@ -34,7 +27,9 @@ export function ChatMessage({ message }: ChatMessageProps) {
       <div className="chat-message__stack">
         {shouldShowBody ? (
           <div className={`chat-bubble chat-bubble--${bubbleTone}`}>
-            <div className="chat-bubble__content">{renderParagraphs(message.content)}</div>
+            <div className="chat-bubble__content">
+              <MathContent content={message.content} />
+            </div>
           </div>
         ) : null}
 
@@ -44,17 +39,33 @@ export function ChatMessage({ message }: ChatMessageProps) {
 
             <ol className="solution-card__steps">
               {resolution.steps.map((step, index) => (
-                <li key={`${step}-${index}`}>{step}</li>
+                <li key={`${step}-${index}`}>
+                  <MathContent content={step} />
+                </li>
               ))}
             </ol>
 
             <div className="solution-card__formula">
-              <strong>{exercise?.extracted_expression ?? "Resultado"}</strong>
-              <span>{resolution.final_result}</span>
+              <span className="solution-card__formula-label">Expresion interpretada</span>
+              {exercise?.extracted_expression ? (
+                <MathFormula
+                  expression={exercise.extracted_expression}
+                  displayMode
+                  source="plain"
+                  className="solution-card__formula-render"
+                />
+              ) : null}
+              <span className="solution-card__formula-label">Resultado</span>
+              <MathFormula
+                expression={resolution.final_result}
+                displayMode
+                source="plain"
+                className="solution-card__formula-render"
+              />
             </div>
 
             <div className="solution-card__explanation">
-              {renderParagraphs(resolution.explanation)}
+              <MathContent content={resolution.explanation} />
             </div>
 
             {exercise?.error_message ? (

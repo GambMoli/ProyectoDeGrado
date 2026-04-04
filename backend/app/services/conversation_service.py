@@ -11,10 +11,12 @@ from app.repositories.conversation_repository import ConversationRepository
 from app.schemas.chat import ChatRequest, ChatResponse, ExerciseOut, ExerciseResolutionOut, MessageOut
 from app.schemas.conversation import ConversationDetail, ConversationSummary
 from app.schemas.enums import ChatMode, ExerciseStatus, MessageRole, MessageStatus, SourceType
+from app.services.conversation_orchestrator_service import ConversationOrchestratorService
 from app.services.conversation_planner_service import ConversationPlan, ConversationPlannerService
 from app.services.explanation_service import ExplanationService
 from app.services.math_parser_service import MathParserError, MathParserService
 from app.services.ocr_service import OCRService
+from app.services.ollama_client import OllamaClientError
 from app.services.practice_service import PracticeService
 from app.services.response_composer_service import ResponseComposerService
 from app.services.sympy_solver_service import SolverError, SymPySolverService
@@ -31,6 +33,7 @@ class ConversationService:
         explanation_service: ExplanationService,
         ocr_service: OCRService,
         practice_service: PracticeService,
+        conversation_orchestrator_service: ConversationOrchestratorService,
         conversation_planner_service: ConversationPlannerService,
         response_composer_service: ResponseComposerService,
         topic_explanation_service: TopicExplanationService,
@@ -41,6 +44,7 @@ class ConversationService:
         self.explanation_service = explanation_service
         self.ocr_service = ocr_service
         self.practice_service = practice_service
+        self.conversation_orchestrator_service = conversation_orchestrator_service
         self.conversation_planner_service = conversation_planner_service
         self.response_composer_service = response_composer_service
         self.topic_explanation_service = topic_explanation_service
@@ -68,6 +72,44 @@ class ConversationService:
                 conversation=conversation,
                 current_message_id=user_message.id,
             )
+            orchestrated = self.conversation_orchestrator_service.orchestrate(
+                message=payload.message,
+                requested_mode=payload.mode,
+                conversation_context=conversation_context,
+                agent_state=conversation.agent_state,
+            )
+            if orchestrated:
+                if orchestrated.mode == "direct" and orchestrated.reply:
+                    response = self._respond_direct_text(
+                        db=db,
+                        user_id=user.id,
+                        conversation=conversation,
+                        user_message=user_message,
+                        assistant_text=orchestrated.reply,
+                        raw_input=payload.message,
+                    )
+                    db.commit()
+                    return response
+
+                if orchestrated.mode == "tool":
+                    plan = ConversationPlan(
+                        actions=orchestrated.actions,
+                        reason=f"orchestrated_{orchestrated.reason}",
+                        topic=orchestrated.topic,
+                        detail_level=orchestrated.detail_level,
+                    )
+                    response = self._execute_text_plan(
+                        db=db,
+                        user_id=user.id,
+                        conversation=conversation,
+                        user_message=user_message,
+                        raw_input=payload.message,
+                        conversation_context=conversation_context,
+                        plan=plan,
+                    )
+                    db.commit()
+                    return response
+
             plan = self.conversation_planner_service.plan(
                 message=payload.message,
                 requested_mode=payload.mode,
@@ -246,6 +288,15 @@ class ConversationService:
                 raw_input=raw_input,
             )
 
+        if "explain_practice_context" in actions:
+            return self._explain_practice_context(
+                db=db,
+                user_id=user_id,
+                conversation=conversation,
+                user_message=user_message,
+                raw_input=raw_input,
+            )
+
         if "solve_exercise" in actions:
             return self._solve_and_respond(
                 db=db,
@@ -326,6 +377,38 @@ class ConversationService:
             conversation,
             summary=summary,
             title_hint=raw_input,
+        )
+        return ChatResponse(
+            user_id=user_id,
+            conversation_id=conversation.id,
+            user_message=self._build_message_out(user_message),
+            assistant_message=self._build_message_out(assistant_message),
+        )
+
+    def _respond_direct_text(
+        self,
+        *,
+        db: Session,
+        user_id: str,
+        conversation: Conversation,
+        user_message: Message,
+        assistant_text: str,
+        raw_input: str,
+    ) -> ChatResponse:
+        assistant_message = self.repository.create_message(
+            db,
+            conversation_id=conversation.id,
+            role=MessageRole.ASSISTANT.value,
+            content=assistant_text,
+            source_type=SourceType.TEXT.value,
+            status=MessageStatus.SOLVED.value,
+        )
+        self.repository.touch_conversation(
+            db,
+            conversation,
+            summary=assistant_text[:160],
+            title_hint=raw_input,
+            agent_state=conversation.agent_state,
         )
         return ChatResponse(
             user_id=user_id,
@@ -518,6 +601,86 @@ class ConversationService:
             assistant_message=self._build_message_out(assistant_message),
         )
 
+    def _explain_practice_context(
+        self,
+        *,
+        db: Session,
+        user_id: str,
+        conversation: Conversation,
+        user_message: Message,
+        raw_input: str,
+    ) -> ChatResponse:
+        practice_context, context_label = self._resolve_practice_context(conversation.agent_state)
+        if not practice_context:
+            return self._answer_theory(
+                db=db,
+                user_id=user_id,
+                conversation=conversation,
+                user_message=user_message,
+                raw_input=raw_input,
+                conversation_context=self._build_recent_context(
+                    conversation=conversation,
+                    current_message_id=user_message.id,
+                ),
+            )
+
+        text: str
+        raw_pending_input = str(practice_context.get("raw_input") or "").strip()
+        if raw_pending_input:
+            try:
+                parsed = self.parser_service.parse(raw_pending_input)
+                solved = self.solver_service.solve(parsed)
+                text = self.explanation_service.generate(
+                    parsed=parsed,
+                    solved=solved,
+                    student_request=raw_input,
+                ).text
+            except Exception:
+                text = self.practice_service.explain_practice_context(
+                    practice_context=practice_context,
+                    student_request=raw_input,
+                )
+        else:
+            text = self.practice_service.explain_practice_context(
+                practice_context=practice_context,
+                student_request=raw_input,
+            )
+
+        assistant_message = self.repository.create_message(
+            db,
+            conversation_id=conversation.id,
+            role=MessageRole.ASSISTANT.value,
+            content=text,
+            source_type=SourceType.TEXT.value,
+            status=MessageStatus.SOLVED.value,
+        )
+        self.repository.touch_conversation(
+            db,
+            conversation,
+            summary=f"explicacion de practica {context_label}",
+            title_hint=raw_input,
+            agent_state=conversation.agent_state,
+        )
+        return ChatResponse(
+            user_id=user_id,
+            conversation_id=conversation.id,
+            user_message=self._build_message_out(user_message),
+            assistant_message=self._build_message_out(assistant_message),
+        )
+
+    @staticmethod
+    def _resolve_practice_context(agent_state: dict | None) -> tuple[dict | None, str]:
+        state = dict(agent_state or {})
+        active_practice = state.get("pending_practice")
+        if isinstance(active_practice, dict) and active_practice:
+            return active_practice, "activa"
+
+        recent_practice = state.get("last_practice_context")
+        if isinstance(recent_practice, dict) and recent_practice:
+            return recent_practice, "reciente"
+
+        return None, ""
+
     def _solve_and_respond(
         self,
         *,
@@ -630,7 +793,17 @@ class ConversationService:
                 assistant_message=self._build_message_out(assistant_message),
             )
 
-        explanation = self.explanation_service.generate(parsed=parsed, solved=solved)
+        try:
+            explanation = self.explanation_service.generate(
+                parsed=parsed,
+                solved=solved,
+                student_request=raw_input,
+            )
+        except OllamaClientError:
+            explanation = self.explanation_service.fallback(
+                parsed=parsed,
+                solved=solved,
+            )
         assistant_message = self.repository.create_message(
             db,
             conversation_id=conversation.id,

@@ -11,6 +11,7 @@ from app.services.knowledge_base_service import (
     normalize_search_text,
 )
 from app.services.ollama_client import OllamaClient, OllamaClientError
+from app.utils.llm_text import normalize_llm_math_text
 
 if TYPE_CHECKING:
     from app.core.config import Settings
@@ -72,6 +73,7 @@ class TopicExplanationService:
             "Usa el contexto reciente solo si realmente ayuda, pero no hables del historial, del corpus ni de reglas internas. "
             "Explica primero la idea central y luego desarrolla solo lo necesario para que se entienda. "
             "Usa ejemplos cortos cuando ayuden. "
+            "Usa texto plano, no LaTeX ni delimitadores como \\(...\\), \\frac o \\cdot. "
             "Evita cierres obligatorios, saludos ceremoniosos y frases de plantilla como 'entiendo que...' o 'no tengo registro de...'. "
             "Si falta un dato importante, pide una sola aclaracion breve."
         )
@@ -83,6 +85,7 @@ class TopicExplanationService:
             "sin decir que falta contexto previo. "
             "Si la pregunta es ambigua pero matematica, pide una sola aclaracion corta. "
             "No uses encabezados ni markdown decorativo. "
+            "Usa texto plano, no LaTeX ni delimitadores como \\(...\\), \\frac o \\cdot. "
             "Usa un ejemplo corto solo cuando aporte. "
             "No cierres con una pregunta por obligacion."
         )
@@ -283,9 +286,7 @@ Responde como tutor humano.
 
     @classmethod
     def _normalize_llm_text(cls, text: str) -> str:
-        normalized = re.sub(r"\*\*(.*?)\*\*", r"\1", text)
-        normalized = re.sub(r"^\* ", "- ", normalized, flags=re.MULTILINE)
-        normalized = re.sub(r"\n{3,}", "\n\n", normalized)
+        normalized = normalize_llm_math_text(text)
         normalized = normalized.strip()
         return cls._soften_robotic_scope_reply(normalized)
 
