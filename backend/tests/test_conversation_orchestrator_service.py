@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from app.schemas.enums import ChatMode
 from app.services.conversation_orchestrator_service import ConversationOrchestratorService
+from app.services.math_parser_service import MathParserService
 
 
 class DirectReplyOllamaClient:
@@ -62,3 +63,28 @@ def test_orchestrator_can_request_a_tool_without_using_the_planner() -> None:
     assert result is not None
     assert result.mode == "tool"
     assert result.actions == ["generate_practice"]
+
+
+def test_orchestrator_prioritizes_a_new_explicit_exercise_over_previous_context() -> None:
+    service = ConversationOrchestratorService(
+        settings=SimpleNamespace(),
+        ollama_client=DirectReplyOllamaClient(),  # type: ignore[arg-type]
+        parser_service=MathParserService(),
+    )
+
+    result = service.orchestrate(
+        message="puedes resolver la derivada de ln(x)/x*sec(x)?",
+        requested_mode=ChatMode.AUTO,
+        conversation_context=["assistant: Deriva la funcion f(x) = 4*x^3 - x + 6."],
+        agent_state={
+            "pending_practice": {
+                "topic": "derivative",
+                "raw_input": "derivada de 4*x^3 - x + 6",
+                "exercise_text": "Deriva la funcion f(x) = 4*x^3 - x + 6.",
+            }
+        },
+    )
+
+    assert result is not None
+    assert result.mode == "tool"
+    assert result.actions == ["solve_exercise"]

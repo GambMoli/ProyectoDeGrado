@@ -52,6 +52,7 @@ def get_conversation_service() -> ConversationService:
     conversation_orchestrator_service = ConversationOrchestratorService(
         settings=settings,
         ollama_client=ollama_client,
+        parser_service=parser_service,
     )
     response_composer_service = ResponseComposerService(settings, ollama_client)
     topic_explanation_service = TopicExplanationService(

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 from app.schemas.enums import ChatMode
+from app.services.math_parser_service import MathParserService, ParsedExercise
 from app.services.ollama_client import OllamaClient, OllamaClientError
 from app.utils.llm_text import normalize_llm_math_text
 
@@ -46,9 +47,15 @@ class ConversationOrchestratorService:
         "ask_clarification",
     )
 
-    def __init__(self, settings: Settings, ollama_client: OllamaClient | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        ollama_client: OllamaClient | None = None,
+        parser_service: MathParserService | None = None,
+    ) -> None:
         self.settings = settings
         self.ollama_client = ollama_client
+        self.parser_service = parser_service
 
     def orchestrate(
         self,
@@ -62,6 +69,14 @@ class ConversationOrchestratorService:
             return None
 
         history = "\n".join(conversation_context) if conversation_context else "Sin contexto previo relevante."
+        current_candidate = self._parse_candidate(message)
+        active_candidate = self._practice_candidate(agent_state or {}, "pending_practice")
+        recent_candidate = self._practice_candidate(agent_state or {}, "last_practice_context")
+        explicit_new_exercise = self._is_explicit_new_exercise(
+            current_candidate=current_candidate,
+            active_candidate=active_candidate,
+            recent_candidate=recent_candidate,
+        )
         prompt = f"""
 Eres el tutor principal de una conversacion de calculo y metodos numericos.
 
@@ -80,6 +95,15 @@ Contexto reciente:
 Estado pedagogico:
 {json.dumps(agent_state or {}, ensure_ascii=False)}
 
+Analisis estructurado del mensaje actual:
+{self._candidate_summary(current_candidate)}
+
+Practica activa comparable:
+{self._candidate_summary(active_candidate)}
+
+Practica reciente comparable:
+{self._candidate_summary(recent_candidate)}
+
 Herramientas disponibles:
 - answer_theory: para explicar un tema usando corpus/recuperacion.
 - solve_exercise: para resolver un problema matematico nuevo.
@@ -93,6 +117,7 @@ Reglas de criterio:
 - Si el estudiante continua un ejercicio activo o reciente, puedes responder directamente o usar explain_practice_context si eso ayuda mas.
 - Si pide un ejercicio nuevo, usa generate_practice.
 - Si trae un problema nuevo concreto para resolver, usa solve_exercise.
+- Si el analisis estructurado del mensaje actual muestra un ejercicio nuevo explicito distinto del que esta en contexto, prioriza solve_exercise y no sigas respondiendo sobre el ejercicio anterior.
 - Si esta entregando su intento de respuesta al ejercicio activo, usa grade_practice.
 - Si pide teoria apoyada en el curso, usa answer_theory.
 - Usa ask_clarification solo cuando sea realmente necesario.
@@ -141,6 +166,16 @@ Uso de herramienta:
         detail_level = self._normalize_detail_level(payload.get("detail_level"))
         topic = str(payload.get("topic")) if payload.get("topic") is not None else None
         reason = str(payload.get("reason") or "llm_orchestrator")
+
+        if explicit_new_exercise:
+            return OrchestratedTurn(
+                mode="tool",
+                actions=["solve_exercise"],
+                reason=f"explicit_new_exercise_{reason}",
+                topic=topic or (current_candidate.problem_type.value if current_candidate else None),
+                detail_level="detailed",
+                confidence=max(confidence, 0.9),
+            )
 
         if mode == "direct":
             reply = str(payload.get("reply") or "").strip()
@@ -202,3 +237,62 @@ Uso de herramienta:
         except (TypeError, ValueError):
             return 0.0
         return max(0.0, min(1.0, confidence))
+
+    def _parse_candidate(self, raw_text: str) -> ParsedExercise | None:
+        if not self.parser_service:
+            return None
+        try:
+            return self.parser_service.parse(raw_text)
+        except Exception:
+            return None
+
+    def _practice_candidate(self, agent_state: dict, key: str) -> ParsedExercise | None:
+        context = dict(agent_state or {}).get(key) or {}
+        raw_input = str(context.get("raw_input") or "").strip()
+        if not raw_input:
+            return None
+        return self._parse_candidate(raw_input)
+
+    @staticmethod
+    def _candidate_summary(candidate: ParsedExercise | None) -> str:
+        if not candidate:
+            return "No se detecto ejercicio estructurado."
+        return json.dumps(
+            {
+                "problem_type": candidate.problem_type.value,
+                "expression": candidate.expression,
+                "variable": candidate.variable,
+                "limit_point": candidate.limit_point,
+            },
+            ensure_ascii=False,
+        )
+
+    @staticmethod
+    def _signature(candidate: ParsedExercise | None) -> tuple[str, str, str, str] | None:
+        if not candidate:
+            return None
+        return (
+            candidate.problem_type.value,
+            candidate.expression.strip(),
+            str(candidate.variable or "").strip(),
+            str(candidate.limit_point or "").strip(),
+        )
+
+    def _is_explicit_new_exercise(
+        self,
+        *,
+        current_candidate: ParsedExercise | None,
+        active_candidate: ParsedExercise | None,
+        recent_candidate: ParsedExercise | None,
+    ) -> bool:
+        current_signature = self._signature(current_candidate)
+        if not current_signature:
+            return False
+
+        active_signature = self._signature(active_candidate)
+        recent_signature = self._signature(recent_candidate)
+        if active_signature and current_signature == active_signature:
+            return False
+        if recent_signature and current_signature == recent_signature:
+            return False
+        return True
