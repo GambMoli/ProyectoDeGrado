@@ -37,6 +37,11 @@ class HesitantPlannerOllamaClient:
         return '{"actions":["ask_clarification"],"reason":"unsure","topic":null,"detail_level":"auto"}'
 
 
+class MisleadingPlannerOllamaClient:
+    def generate(self, *, system_prompt: str, prompt: str, temperature: float = 0.2) -> str:
+        return '{"actions":["solve_exercise"],"reason":"wrong_router","topic":"integral","detail_level":"auto"}'
+
+
 def build_service(ollama_client: object) -> ConversationPlannerService:
     return ConversationPlannerService(
         settings=SimpleNamespace(),
@@ -136,6 +141,33 @@ def test_planner_respects_requested_mode() -> None:
     plan = service.plan(
         message="Resuelve x^2 + 1 = 0",
         requested_mode=ChatMode.EXERCISE,
+        conversation_context=[],
+        agent_state={},
+    )
+
+    assert plan.actions == ["solve_exercise"]
+
+
+def test_planner_reroutes_natural_practice_request_even_if_llm_marks_it_as_solver_task() -> None:
+    service = build_service(MisleadingPlannerOllamaClient())
+
+    plan = service.plan(
+        message="Dame un ejercicio de integrales",
+        requested_mode=ChatMode.AUTO,
+        conversation_context=[],
+        agent_state={},
+    )
+
+    assert plan.actions == ["generate_practice"]
+    assert plan.reason == "guardrail_reroute_natural_practice_request"
+
+
+def test_planner_keeps_solver_task_when_message_contains_explicit_math_expression() -> None:
+    service = build_service(MisleadingPlannerOllamaClient())
+
+    plan = service.plan(
+        message="Resuelve la integral de x^2 + 1 dx",
+        requested_mode=ChatMode.AUTO,
         conversation_context=[],
         agent_state={},
     )

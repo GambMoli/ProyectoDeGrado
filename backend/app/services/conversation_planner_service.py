@@ -9,6 +9,7 @@ from app.schemas.enums import ChatMode
 from app.services.knowledge_base_service import KnowledgeBaseService, normalize_search_text
 from app.services.math_parser_service import MathParserService
 from app.services.ollama_client import OllamaClient, OllamaClientError
+from app.utils.expression_normalizer import looks_like_structured_math
 
 if TYPE_CHECKING:
     from app.core.config import Settings
@@ -361,6 +362,15 @@ Devuelve solo JSON valido con esta forma:
                 detail_level=detail_level,
             )
 
+        if plan.actions == ["solve_exercise"] and self._looks_like_practice_request(normalized):
+            if not self._contains_explicit_math_task(message):
+                return ConversationPlan(
+                    actions=["generate_practice"],
+                    reason="guardrail_reroute_natural_practice_request",
+                    topic=detected_topic,
+                    detail_level=detail_level,
+                )
+
         if plan.actions == ["ask_clarification"] and self._looks_like_practice_request(normalized):
             return ConversationPlan(
                 actions=["generate_practice"],
@@ -516,6 +526,13 @@ Devuelve solo JSON valido con esta forma:
         if not detected_topic or detected_topic == pending_topic:
             return False
         return any(pattern in normalized_message for pattern in cls._practice_correction_patterns)
+
+    @staticmethod
+    def _contains_explicit_math_task(message: str) -> bool:
+        normalized = normalize_search_text(message)
+        if any(token in normalized for token in ("resuelve", "calcula", "simplifica", "evalua")):
+            return True
+        return looks_like_structured_math(message)
 
     def _detect_topic(self, normalized_message: str) -> str | None:
         for topic, aliases in self._topic_aliases:
