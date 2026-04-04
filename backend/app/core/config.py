@@ -29,6 +29,7 @@ class Settings(BaseSettings):
             "http://localhost:8080",
         ]
     ) # Esto es por si corren el front en otro puerto xd
+    cors_origin_regex: str | None = None
 
     ollama_enabled: bool = False
     ollama_base_url: str = "http://host.docker.internal:11434"
@@ -64,6 +65,14 @@ class Settings(BaseSettings):
         if value.startswith("postgresql://") and "+psycopg" not in value:
             return value.replace("postgresql://", "postgresql+psycopg://", 1)
         return value
+
+    @field_validator("cors_origin_regex", mode="before")
+    @classmethod
+    def normalize_cors_origin_regex(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
 
 
 @lru_cache
