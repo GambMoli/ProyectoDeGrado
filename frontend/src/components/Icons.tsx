@@ -1,10 +1,13 @@
+import React from "react";
+
 interface IconProps {
   className?: string;
+  style?: React.CSSProperties;
 }
 
-export function BrandIcon({ className }: IconProps) {
+export function BrandIcon({ className, style }: IconProps) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" className={className} style={style} aria-hidden="true">
       <rect x="4" y="5" width="16" height="14" rx="3" stroke="currentColor" strokeWidth="1.8" />
       <path d="M9 9H15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       <path d="M9 13H15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -13,9 +16,9 @@ export function BrandIcon({ className }: IconProps) {
   );
 }
 
-export function MenuIcon({ className }: IconProps) {
+export function MenuIcon({ className, style }: IconProps) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" className={className} style={style} aria-hidden="true">
       <path d="M5 8H19" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
       <path d="M5 12H19" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
       <path d="M5 16H15" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
@@ -23,9 +26,9 @@ export function MenuIcon({ className }: IconProps) {
   );
 }
 
-export function ChatIcon({ className }: IconProps) {
+export function ChatIcon({ className, style }: IconProps) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" className={className} style={style} aria-hidden="true">
       <path
         d="M7 7.5H17C18.1 7.5 19 8.4 19 9.5V15.5C19 16.6 18.1 17.5 17 17.5H11L7 20V17.5C5.9 17.5 5 16.6 5 15.5V9.5C5 8.4 5.9 7.5 7 7.5Z"
         stroke="currentColor"
@@ -36,9 +39,9 @@ export function ChatIcon({ className }: IconProps) {
   );
 }
 
-export function HistoryIcon({ className }: IconProps) {
+export function HistoryIcon({ className, style }: IconProps) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" className={className} style={style} aria-hidden="true">
       <path d="M5 12A7 7 0 1 0 8 6.3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
       <path d="M5 5V9H9" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M12 8.5V12L14.8 13.7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
@@ -46,9 +49,9 @@ export function HistoryIcon({ className }: IconProps) {
   );
 }
 
-export function ExerciseIcon({ className }: IconProps) {
+export function ExerciseIcon({ className, style }: IconProps) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" className={className} style={style} aria-hidden="true">
       <path d="M9 6L15 18" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
       <path d="M7 8H11" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
       <path d="M13 16H17" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
@@ -57,9 +60,9 @@ export function ExerciseIcon({ className }: IconProps) {
   );
 }
 
-export function SettingsIcon({ className }: IconProps) {
+export function SettingsIcon({ className, style }: IconProps) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" className={className} style={style} aria-hidden="true">
       <path
         d="M12 8.5A3.5 3.5 0 1 1 12 15.5A3.5 3.5 0 0 1 12 8.5Z"
         stroke="currentColor"
@@ -75,18 +78,18 @@ export function SettingsIcon({ className }: IconProps) {
   );
 }
 
-export function PlusIcon({ className }: IconProps) {
+export function PlusIcon({ className, style }: IconProps) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" className={className} style={style} aria-hidden="true">
       <path d="M12 6V18" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
       <path d="M6 12H18" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
     </svg>
   );
 }
 
-export function UploadIcon({ className }: IconProps) {
+export function UploadIcon({ className, style }: IconProps) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" className={className} style={style} aria-hidden="true">
       <path d="M12 16V7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       <path d="M8.5 10.5L12 7L15.5 10.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
       <path
@@ -99,9 +102,9 @@ export function UploadIcon({ className }: IconProps) {
   );
 }
 
-export function CameraIcon({ className }: IconProps) {
+export function CameraIcon({ className, style }: IconProps) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" className={className} style={style} aria-hidden="true">
       <path
         d="M7.5 7.5L8.5 5.5H15.5L16.5 7.5H18C19.1 7.5 20 8.4 20 9.5V17C20 18.1 19.1 19 18 19H6C4.9 19 4 18.1 4 17V9.5C4 8.4 4.9 7.5 6 7.5H7.5Z"
         stroke="currentColor"
@@ -113,9 +116,9 @@ export function CameraIcon({ className }: IconProps) {
   );
 }
 
-export function FormulaIcon({ className }: IconProps) {
+export function FormulaIcon({ className, style }: IconProps) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" className={className} style={style} aria-hidden="true">
       <path d="M6 7H18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       <path d="M8.5 7L15.5 17" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       <path d="M6 17H18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -123,9 +126,9 @@ export function FormulaIcon({ className }: IconProps) {
   );
 }
 
-export function AttachmentIcon({ className }: IconProps) {
+export function AttachmentIcon({ className, style }: IconProps) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" className={className} style={style} aria-hidden="true">
       <path
         d="M9.5 12.5L13.9 8.1C15.1 6.9 17 6.9 18.2 8.1C19.4 9.3 19.4 11.2 18.2 12.4L11.5 19.1C9.8 20.8 7 20.8 5.3 19.1C3.6 17.4 3.6 14.6 5.3 12.9L12.1 6.1"
         stroke="currentColor"
@@ -137,9 +140,9 @@ export function AttachmentIcon({ className }: IconProps) {
   );
 }
 
-export function SendIcon({ className }: IconProps) {
+export function SendIcon({ className, style }: IconProps) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" className={className} style={style} aria-hidden="true">
       <path
         d="M5 12L19 5L15.5 12L19 19L5 12Z"
         stroke="currentColor"
@@ -150,7 +153,7 @@ export function SendIcon({ className }: IconProps) {
   );
 }
 
-export function UserAvatarIcon({ className }: IconProps) {
+export function UserAvatarIcon({ className, style }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
       <circle cx="12" cy="8.5" r="3.1" stroke="currentColor" strokeWidth="1.7" />
@@ -164,7 +167,7 @@ export function UserAvatarIcon({ className }: IconProps) {
   );
 }
 
-export function BotAvatarIcon({ className }: IconProps) {
+export function BotAvatarIcon({ className, style }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
       <rect x="6" y="8" width="12" height="9" rx="3" stroke="currentColor" strokeWidth="1.7" />
@@ -176,7 +179,7 @@ export function BotAvatarIcon({ className }: IconProps) {
   );
 }
 
-export function CloseIcon({ className }: IconProps) {
+export function CloseIcon({ className, style }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
       <path d="M7 7L17 17" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -185,7 +188,7 @@ export function CloseIcon({ className }: IconProps) {
   );
 }
 
-export function InfoIcon({ className }: IconProps) {
+export function InfoIcon({ className, style }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
       <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.7" />

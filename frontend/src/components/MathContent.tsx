@@ -10,6 +10,7 @@ interface MathFormulaProps {
   displayMode?: boolean;
   source?: "latex" | "plain";
   className?: string;
+  style?: React.CSSProperties;
 }
 
 const blockMathPattern = /\\\[([\s\S]*?)\\\]/g;
@@ -42,6 +43,7 @@ export function MathFormula({
   displayMode = false,
   source = "latex",
   className,
+  style,
 }: MathFormulaProps) {
   const latexExpression = source === "plain" ? plainMathToLatex(expression) : expression.trim();
   const html = katex.renderToString(latexExpression || "\\,", {
@@ -54,6 +56,7 @@ export function MathFormula({
   return (
     <Tag
       className={className}
+      style={style}
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );
