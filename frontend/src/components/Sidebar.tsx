@@ -1,53 +1,117 @@
-import {
-  BrandIcon,
-  ChatIcon,
-  ExerciseIcon,
-  HistoryIcon,
-  PlusIcon,
-  SettingsIcon,
-} from "./Icons";
+import React from "react";
+import { Box, Typography, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Button, Divider } from "@mui/material";
+import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
+import HistoryIcon from "@mui/icons-material/History";
+import CalculateOutlinedIcon from "@mui/icons-material/CalculateOutlined";
+import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
+import AddIcon from "@mui/icons-material/Add";
+import { useNavigate, useLocation } from "react-router-dom";
+import { BrandIcon } from "./Icons";
 
 interface SidebarProps {
-  onOpenHistory: () => void;
-  onOpenAttach: () => void;
+  onOpenHistory?: () => void;
+  onOpenAttach?: () => void;
+  onNavigateReports?: () => void;
 }
 
-export function Sidebar({ onOpenHistory, onOpenAttach }: SidebarProps) {
+export function Sidebar({ onOpenHistory, onOpenAttach, onNavigateReports }: SidebarProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const handleNavigate = (path: string) => {
+    navigate(path);
+  };
+
   return (
-    <aside className="sidebar">
-      <div className="sidebar__brand">
-        <div className="sidebar__brand-icon">
-          <BrandIcon className="sidebar__brand-svg" />
-        </div>
-        <div>
-          <h1>Cubik IA</h1>
-          <p>Academic Curator</p>
-        </div>
-      </div>
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100%", bgcolor: "#fff" }}>
+      {/* Brand */}
+      <Box sx={{ p: 3, pt: 4, display: "flex", alignItems: "center", gap: 1.5 }}>
+        <Box sx={{ width: 40, height: 40, borderRadius: 2, bgcolor: "#EFF6FF", display: "grid", placeItems: "center", color: "#1E3A8A" }}>
+           <BrandIcon style={{ width: 20, height: 20 }} />
+        </Box>
+        <Box>
+            <Typography variant="h6" sx={{ color: "#1E3A8A", fontWeight: 800, fontSize: "1.1rem", lineHeight: 1.2 }}>
+                Cubik IA
+            </Typography>
+            <Typography variant="caption" sx={{ color: "#6B7280", fontWeight: 700, fontSize: "0.75rem" }}>
+                Academic Curator
+            </Typography>
+        </Box>
+      </Box>
 
-      <nav className="sidebar__nav" aria-label="Navegacion principal">
-        <button className="sidebar__nav-item is-active" type="button">
-          <ChatIcon className="sidebar__nav-svg" />
-          <span>Chat</span>
-        </button>
-        <button className="sidebar__nav-item" type="button" onClick={onOpenHistory}>
-          <HistoryIcon className="sidebar__nav-svg" />
-          <span>History</span>
-        </button>
-        <button className="sidebar__nav-item" type="button" onClick={onOpenAttach}>
-          <ExerciseIcon className="sidebar__nav-svg" />
-          <span>Exercises</span>
-        </button>
-        <button className="sidebar__nav-item" type="button">
-          <SettingsIcon className="sidebar__nav-svg" />
-          <span>Settings</span>
-        </button>
-      </nav>
+      {/* Nav */}
+      <List sx={{ px: 2, flexGrow: 1 }}>
+        <ListItem disablePadding sx={{ mb: 0.5 }}>
+            <ListItemButton
+                selected={location.pathname === "/"}
+                onClick={() => handleNavigate("/")}
+                sx={{
+                    borderRadius: "8px",
+                    bgcolor: location.pathname === "/" ? "#EFF6FF" : "transparent",
+                    color: location.pathname === "/" ? "#1E3A8A" : "#4B5563",
+                    py: 1.2, px: 2,
+                    "&.Mui-selected": { bgcolor: "#EFF6FF", color: "#1E3A8A", "&:hover": { bgcolor: "#E0EFFF" } },
+                    "&:hover": { bgcolor: "#F3F4F6" },
+                }}
+            >
+                <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}><ChatBubbleOutlineIcon fontSize="small" /></ListItemIcon>
+                <ListItemText primary="Chat" primaryTypographyProps={{ fontSize: "0.875rem", fontWeight: location.pathname === "/" ? 700 : 600 }} />
+            </ListItemButton>
+        </ListItem>
 
-      <button className="sidebar__cta" type="button" onClick={onOpenAttach}>
-        <PlusIcon className="sidebar__cta-icon" />
-        <span>New Exercise</span>
-      </button>
-    </aside>
+        <ListItem disablePadding sx={{ mb: 0.5 }}>
+            <ListItemButton
+                onClick={onOpenHistory}
+                sx={{ borderRadius: "8px", color: "#4B5563", py: 1.2, px: 2, "&:hover": { bgcolor: "#F3F4F6" } }}
+            >
+                <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}><HistoryIcon fontSize="small" /></ListItemIcon>
+                <ListItemText primary="History" primaryTypographyProps={{ fontSize: "0.875rem", fontWeight: 600 }} />
+            </ListItemButton>
+        </ListItem>
+
+        <ListItem disablePadding sx={{ mb: 0.5 }}>
+            <ListItemButton
+                onClick={onOpenAttach}
+                sx={{ borderRadius: "8px", color: "#4B5563", py: 1.2, px: 2, "&:hover": { bgcolor: "#F3F4F6" } }}
+            >
+                <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}><CalculateOutlinedIcon fontSize="small" /></ListItemIcon>
+                <ListItemText primary="Exercises" primaryTypographyProps={{ fontSize: "0.875rem", fontWeight: 600 }} />
+            </ListItemButton>
+        </ListItem>
+
+        <ListItem disablePadding sx={{ mb: 0.5 }}>
+            <ListItemButton
+                selected={location.pathname === "/reports"}
+                onClick={() => handleNavigate("/reports")}
+                sx={{ 
+                    borderRadius: "8px", 
+                    bgcolor: location.pathname === "/reports" ? "#EFF6FF" : "transparent",
+                    color: location.pathname === "/reports" ? "#1E3A8A" : "#4B5563",
+                    py: 1.2, px: 2, "&.Mui-selected": { bgcolor: "#EFF6FF", color: "#1E3A8A", "&:hover": { bgcolor: "#E0EFFF" } }, "&:hover": { bgcolor: "#F3F4F6" } 
+                }}
+            >
+                <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}><SettingsOutlinedIcon fontSize="small" /></ListItemIcon>
+                <ListItemText primary="Reportes" primaryTypographyProps={{ fontSize: "0.875rem", fontWeight: location.pathname === "/reports" ? 700 : 600 }} />
+            </ListItemButton>
+        </ListItem>
+      </List>
+
+      {/* CTA */}
+      <Box sx={{ p: 2, pb: 4 }}>
+        <Button
+            variant="contained"
+            fullWidth
+            onClick={onOpenAttach}
+            startIcon={<AddIcon />}
+            sx={{
+                bgcolor: "#1E3A8A", color: "#fff", borderRadius: "10px", textTransform: "none",
+                fontWeight: 700, py: 1.2, boxShadow: "0 10px 20px rgba(30, 58, 138, 0.15)",
+                "&:hover": { bgcolor: "#1E40AF", boxShadow: "0 10px 20px rgba(30, 58, 138, 0.25)" }
+            }}
+        >
+            New Exercise
+        </Button>
+      </Box>
+    </Box>
   );
 }

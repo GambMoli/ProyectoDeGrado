@@ -1,7 +1,21 @@
 import { useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
+import { 
+  Box, 
+  TextField, 
+  IconButton, 
+  Button, 
+  Paper, 
+  Typography, 
+  Grid, 
+  Tooltip,
+  Chip
+} from "@mui/material";
+import SendIcon from "@mui/icons-material/Send";
+import FunctionsIcon from "@mui/icons-material/Functions";
+import AttachFileIcon from "@mui/icons-material/AttachFile";
+import CloseIcon from "@mui/icons-material/Close";
 
-import { AttachmentIcon, CloseIcon, FormulaIcon, SendIcon } from "./Icons";
 import { extractMathCandidateForPreview, MathFormula, plainMathToLatex } from "./MathContent";
 
 interface ComposerProps {
@@ -42,7 +56,7 @@ export function Composer({
     setIsFormulaPanelOpen(false);
   }
 
-  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       void handleSubmit();
@@ -51,105 +65,192 @@ export function Composer({
 
   function insertFormulaTemplate(template: string) {
     const textarea = textareaRef.current;
-    const selectionStart = textarea?.selectionStart ?? message.length;
-    const selectionEnd = textarea?.selectionEnd ?? message.length;
+    if (!textarea) return;
+
+    const selectionStart = textarea.selectionStart ?? message.length;
+    const selectionEnd = textarea.selectionEnd ?? message.length;
     const prefix = message.slice(0, selectionStart);
     const suffix = message.slice(selectionEnd);
     const glue = prefix && !prefix.endsWith(" ") && !prefix.endsWith("\n") ? " " : "";
     const nextValue = `${prefix}${glue}${template}${suffix}`;
     const cursorPosition = (prefix + glue + template).length;
+    
     setMessage(nextValue);
-    requestAnimationFrame(() => {
-      textareaRef.current?.focus();
-      textareaRef.current?.setSelectionRange(cursorPosition, cursorPosition);
-    });
+    
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(cursorPosition, cursorPosition);
+    }, 0);
   }
 
   const previewCandidate = extractMathCandidateForPreview(message);
   const previewLatex = previewCandidate ? plainMathToLatex(previewCandidate) : null;
 
   return (
-    <div className="composer">
-      <div className="composer__tools">
-        <button
-          className={`composer__tool ${isFormulaPanelOpen ? "is-active" : ""}`}
-          type="button"
-          onClick={() => setIsFormulaPanelOpen((value) => !value)}
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+      {/* Tools */}
+      <Box sx={{ display: "flex", alignItems: "center", gap: 2, px: 0.5 }}>
+        <Button
+          size="small"
+          startIcon={<FunctionsIcon />}
+          onClick={() => setIsFormulaPanelOpen((v) => !v)}
+          sx={{ 
+            color: isFormulaPanelOpen ? "#1E3A8A" : "#6B7280", 
+            textTransform: "none", 
+            fontWeight: 700,
+            fontSize: "0.75rem",
+            bgcolor: isFormulaPanelOpen ? "#EFF6FF" : "transparent",
+            "&:hover": { bgcolor: "#F3F4F6" }
+          }}
         >
-          <FormulaIcon className="composer__tool-icon" />
-          <span>Insertar formula</span>
-        </button>
-        <button className="composer__tool" type="button" onClick={onOpenAttach}>
-          <AttachmentIcon className="composer__tool-icon" />
-          <span>PNG/JPEG</span>
-        </button>
-        <span className="composer__presence" aria-hidden="true" />
-      </div>
+          INSERTAR FÓRMULA
+        </Button>
+        <Button
+          size="small"
+          startIcon={<AttachFileIcon />}
+          onClick={onOpenAttach}
+          sx={{ 
+            color: "#6B7280", 
+            textTransform: "none", 
+            fontWeight: 700,
+            fontSize: "0.75rem",
+            "&:hover": { bgcolor: "#F3F4F6" }
+          }}
+        >
+          PNG/JPEG
+        </Button>
+        <Box sx={{ ml: "auto", width: 8, height: 8, borderRadius: "50%", bgcolor: "#10B981" }} />
+      </Box>
 
-      {isFormulaPanelOpen ? (
-        <div className="composer__formula-panel">
-          <div className="composer__formula-grid">
+      {/* Formula Panel */}
+      {isFormulaPanelOpen && (
+        <Paper 
+          elevation={0} 
+          sx={{ 
+            p: 2, 
+            borderRadius: 3, 
+            bgcolor: "#F9FAFB", 
+            border: "1px solid #E5E7EB" 
+          }}
+        >
+          <Grid container spacing={1.5}>
             {formulaSnippets.map((snippet) => (
-              <button
-                key={snippet.label}
-                type="button"
-                className="composer__formula-chip"
-                onClick={() => insertFormulaTemplate(snippet.value)}
-              >
-                <span>{snippet.label}</span>
-                <MathFormula
-                  expression={snippet.preview}
-                  displayMode
-                  className="composer__formula-chip-preview"
-                />
-              </button>
+              <Grid item xs={6} sm={4} key={snippet.label}>
+                <Button
+                  fullWidth
+                  onClick={() => insertFormulaTemplate(snippet.value)}
+                  sx={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "flex-start",
+                    p: 1.5,
+                    borderRadius: 2,
+                    bgcolor: "#fff",
+                    border: "1px solid #E5E7EB",
+                    textTransform: "none",
+                    color: "inherit",
+                    "&:hover": { borderColor: "#1E3A8A", bgcolor: "#fff" }
+                  }}
+                >
+                  <Typography variant="caption" sx={{ fontWeight: 800, color: "#1E3A8A", mb: 1, textTransform: "uppercase" }}>
+                    {snippet.label}
+                  </Typography>
+                  <Box sx={{ width: "100%", overflowX: "auto" }}>
+                    <MathFormula expression={snippet.preview} displayMode />
+                  </Box>
+                </Button>
+              </Grid>
             ))}
-          </div>
+          </Grid>
+          <Typography variant="caption" sx={{ mt: 1.5, display: "block", color: "#6B7280" }}>
+            El asistente entiende entradas como `∫ x^2 dx`, `d/dx (x^3)` o `lim x-&gt;0 sin(x)/x`.
+          </Typography>
+        </Paper>
+      )}
 
-          <div className="composer__formula-help">
-            <p>El asistente entiende entradas como `∫ x^2 dx`, `d/dx (x^3)` o `lim x-&gt;0 sin(x)/x`.</p>
-          </div>
-        </div>
-      ) : null}
+      {/* File Chip */}
+      {selectedFile && (
+        <Box sx={{ px: 0.5 }}>
+          <Chip
+            label={selectedFile.name}
+            onDelete={onClearFile}
+            deleteIcon={<CloseIcon sx={{ fontSize: "14px !important" }} />}
+            sx={{ 
+              bgcolor: "#EFF6FF", 
+              color: "#1E3A8A", 
+              fontWeight: 700,
+              borderRadius: "8px",
+              "& .MuiChip-deleteIcon": { color: "#1E3A8A", "&:hover": { color: "#1E40AF" } }
+            }}
+          />
+        </Box>
+      )}
 
-      {selectedFile ? (
-        <div className="composer__file-chip">
-          <span>{selectedFile.name}</span>
-          <button type="button" onClick={onClearFile} aria-label="Quitar archivo adjunto">
-            <CloseIcon className="composer__file-chip-icon" />
-          </button>
-        </div>
-      ) : null}
+      {/* Math Preview */}
+      {previewLatex && (
+        <Paper 
+          elevation={0} 
+          sx={{ 
+            p: 2, 
+            borderRadius: 3, 
+            bgcolor: "#F9FAFB", 
+            border: "1px solid #E5E7EB" 
+          }}
+        >
+          <Typography variant="caption" sx={{ fontWeight: 800, color: "#1E3A8A", mb: 1, display: "block", textTransform: "uppercase" }}>
+            Vista previa
+          </Typography>
+          <Box sx={{ overflowX: "auto" }}>
+            <MathFormula expression={previewLatex} displayMode />
+          </Box>
+        </Paper>
+      )}
 
-      {previewLatex ? (
-        <div className="composer__preview-card">
-          <span className="composer__preview-label">Vista previa</span>
-          <MathFormula expression={previewLatex} displayMode className="composer__preview-formula" />
-        </div>
-      ) : null}
-
-      <div className="composer__box">
-        <textarea
-          ref={textareaRef}
-          className="composer__textarea"
-          placeholder="Escribe tu consulta matematica aqui..."
+      {/* Input Box */}
+      <Box 
+        sx={{ 
+          display: "flex", 
+          alignItems: "flex-end", 
+          gap: 1.5, 
+          p: 1.5, 
+          bgcolor: "#fff", 
+          borderRadius: 4, 
+          border: "1px solid #E5E7EB",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
+          "&:focus-within": { borderColor: "#1E3A8A" }
+        }}
+      >
+        <TextField
+          fullWidth
+          multiline
+          maxRows={6}
+          placeholder="Escribe tu consulta matemática aquí..."
           value={message}
           disabled={disabled}
-          onChange={(event) => setMessage(event.target.value)}
+          onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
-          rows={2}
+          inputRef={textareaRef}
+          variant="standard"
+          InputProps={{ 
+            disableUnderline: true,
+            sx: { fontSize: "0.95rem", py: 0.5 }
+          }}
         />
-
-        <button
-          className="composer__send"
-          type="button"
+        <IconButton
+          onClick={handleSubmit}
           disabled={disabled || (!message.trim() && !selectedFile)}
-          onClick={() => void handleSubmit()}
-          aria-label={disabled ? "Procesando mensaje" : "Enviar mensaje"}
+          sx={{ 
+            bgcolor: "#1E3A8A", 
+            color: "#fff", 
+            borderRadius: "12px",
+            p: 1.5,
+            "&:hover": { bgcolor: "#1E40AF" },
+            "&.Mui-disabled": { bgcolor: "#F3F4F6", color: "#9CA3AF" }
+          }}
         >
-          <SendIcon className="composer__send-icon" />
-        </button>
-      </div>
-    </div>
+          <SendIcon fontSize="small" />
+        </IconButton>
+      </Box>
+    </Box>
   );
 }
