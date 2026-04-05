@@ -131,11 +131,18 @@ class TopicExplanationService:
             )
             system_prompt = self.open_math_system_prompt
             source = "ollama_math_chat"
-            
-        text = self.ollama_client.generate(
-            system_prompt=system_prompt,
-            prompt=prompt,
-        )
+
+        try:
+            text = self.ollama_client.generate(
+                system_prompt=system_prompt,
+                prompt=prompt,
+            )
+        except OllamaClientError:
+            return TopicExplanationResult(
+                text=self._model_unavailable_text(),
+                source=f"{source}_unavailable",
+                references=references,
+            )
         return TopicExplanationResult(
             text=self._normalize_llm_text(text),
             source=source,
@@ -171,10 +178,24 @@ class TopicExplanationService:
             outline=outline,
             conversation_context=conversation_context,
         )
-        text = self.ollama_client.generate(
-            system_prompt=self.rag_system_prompt,
-            prompt=prompt,
-        )
+        try:
+            text = self.ollama_client.generate(
+                system_prompt=self.rag_system_prompt,
+                prompt=prompt,
+            )
+        except OllamaClientError:
+            return TopicExplanationResult(
+                text=self._model_unavailable_text(),
+                source="ollama_course_overview_unavailable",
+                references=[
+                    KnowledgeSearchResult(
+                        document=document,
+                        score=1.0,
+                        matched_terms=[],
+                    )
+                    for document in course_documents[: self.settings.rag_top_k]
+                ],
+            )
         return TopicExplanationResult(
             text=self._normalize_llm_text(text),
             source="ollama_course_overview",
@@ -283,6 +304,13 @@ Responde como tutor humano.
 - No recites el esquema de forma mecanica.
 - Evita markdown decorativo y encabezados rigidos.
 """.strip()
+
+    @staticmethod
+    def _model_unavailable_text() -> str:
+        return (
+            "No pude obtener una respuesta del modelo en este momento. "
+            "Intenta de nuevo en unos segundos."
+        )
 
     @classmethod
     def _normalize_llm_text(cls, text: str) -> str:

@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.services.knowledge_base_service import KnowledgeBaseService
+from app.services.ollama_client import OllamaClientError
 from app.services.topic_explanation_service import TopicExplanationService
 
 DATASETS_DIR = Path(__file__).resolve().parents[2] / "knowledge" / "datasets"
@@ -21,6 +22,11 @@ class FakeOllamaClient:
             "Podrias comenzar por decirme que te gustaria hablar o explorar en este espacio? "
             "Estoy aqui para ayudarte y apoyarte en tu aprendizaje."
         )
+
+
+class FailingOllamaClient:
+    def generate(self, *, system_prompt: str, prompt: str, temperature: float = 0.2) -> str:
+        raise OllamaClientError("timeout")
 
 
 def build_service() -> TopicExplanationService:
@@ -102,3 +108,31 @@ def test_normalize_llm_text_keeps_natural_math_explanation() -> None:
     normalized = TopicExplanationService._normalize_llm_text(text)
 
     assert normalized == text
+
+
+def test_topic_explanation_falls_back_when_ollama_times_out_on_rag() -> None:
+    service = TopicExplanationService(
+        settings=SimpleNamespace(rag_top_k=4),
+        knowledge_base_service=KnowledgeBaseService(DATASETS_DIR),
+        ollama_client=FailingOllamaClient(),
+    )
+
+    result = service.answer("Explicame biseccion")
+
+    assert result.source == "ollama_rag_unavailable"
+    assert result.references
+    assert "modelo" in result.text.lower()
+    assert "biseccion" not in result.text.lower()
+
+
+def test_course_overview_falls_back_when_ollama_times_out() -> None:
+    service = TopicExplanationService(
+        settings=SimpleNamespace(rag_top_k=4),
+        knowledge_base_service=KnowledgeBaseService(DATASETS_DIR),
+        ollama_client=FailingOllamaClient(),
+    )
+
+    result = service.answer("Que sabes de calculo 1")
+
+    assert result.source == "ollama_course_overview_unavailable"
+    assert "modelo" in result.text.lower()
