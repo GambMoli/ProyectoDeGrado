@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -14,6 +16,7 @@ from app.schemas.enums import ChatMode, ExerciseStatus, MessageRole, MessageStat
 from app.services.conversation_orchestrator_service import ConversationOrchestratorService
 from app.services.conversation_planner_service import ConversationPlan, ConversationPlannerService
 from app.services.explanation_service import ExplanationService
+from app.services.knowledge_base_service import normalize_search_text, tokenize
 from app.services.math_parser_service import MathParserError, MathParserService
 from app.services.ocr_service import OCRService
 from app.services.ollama_client import OllamaClientError
@@ -24,6 +27,71 @@ from app.services.topic_explanation_service import TopicExplanationService
 
 
 class ConversationService:
+    _math_scope_tokens = {
+        "calculo",
+        "derivada",
+        "derivadas",
+        "integral",
+        "integrales",
+        "integracion",
+        "limite",
+        "limites",
+        "funcion",
+        "funciones",
+        "ecuacion",
+        "ecuaciones",
+        "serie",
+        "taylor",
+        "biseccion",
+        "newton",
+        "secante",
+        "trapecio",
+        "trapecios",
+        "simpson",
+        "lagrange",
+        "interpolacion",
+        "metodos",
+        "numericos",
+        "matriz",
+        "matrices",
+        "polinomio",
+        "polinomios",
+        "raiz",
+        "raices",
+        "sustitucion",
+        "fracciones",
+        "parciales",
+    }
+    _follow_up_tokens = {
+        "eso",
+        "ese",
+        "esta",
+        "anterior",
+        "mismo",
+        "resultado",
+        "procedimiento",
+        "paso",
+        "explica",
+        "explicame",
+        "resolverlo",
+        "resuelvelo",
+        "hazlo",
+        "intentalo",
+        "intentalo",
+        "ayuda",
+        "pista",
+        "continua",
+        "continuar",
+        "dale",
+        "entiendo",
+        "entendi",
+    }
+    _short_follow_up_messages = {"si", "sí", "ok", "dale", "continua", "continúa", "hazlo"}
+    _math_symbol_pattern = re.compile(
+        r"(d/dx|dy/dx|dx|∫|lim|sqrt|sin|cos|tan|ln|log|x\^|=\s*|[0-9]\s*[\+\-\*/])",
+        re.IGNORECASE,
+    )
+
     def __init__(
         self,
         *,
@@ -72,6 +140,20 @@ class ConversationService:
                 conversation=conversation,
                 current_message_id=user_message.id,
             )
+            if not self._is_supported_text_message(
+                message=payload.message,
+                conversation_context=conversation_context,
+                agent_state=conversation.agent_state,
+            ):
+                response = self._reject_out_of_scope(
+                    db=db,
+                    user_id=user.id,
+                    conversation=conversation,
+                    user_message=user_message,
+                    raw_input=payload.message,
+                )
+                db.commit()
+                return response
             orchestrated = self.conversation_orchestrator_service.orchestrate(
                 message=payload.message,
                 requested_mode=payload.mode,
@@ -601,6 +683,42 @@ class ConversationService:
             assistant_message=self._build_message_out(assistant_message),
         )
 
+    def _reject_out_of_scope(
+        self,
+        *,
+        db: Session,
+        user_id: str,
+        conversation: Conversation,
+        user_message: Message,
+        raw_input: str,
+    ) -> ChatResponse:
+        rejection_text = (
+            "Solo puedo ayudarte con temas de calculo y metodos numericos. "
+            "Si quieres, escribeme un ejercicio, una duda teorica o sube una imagen relacionada."
+        )
+        assistant_message = self.repository.create_message(
+            db,
+            conversation_id=conversation.id,
+            role=MessageRole.ASSISTANT.value,
+            content=rejection_text,
+            source_type=SourceType.TEXT.value,
+            status=MessageStatus.NEEDS_CLARIFICATION.value,
+            error_message=rejection_text,
+        )
+        self.repository.touch_conversation(
+            db,
+            conversation,
+            summary=rejection_text,
+            title_hint=raw_input,
+            agent_state=conversation.agent_state,
+        )
+        return ChatResponse(
+            user_id=user_id,
+            conversation_id=conversation.id,
+            user_message=self._build_message_out(user_message),
+            assistant_message=self._build_message_out(assistant_message),
+        )
+
     def _explain_practice_context(
         self,
         *,
@@ -843,6 +961,76 @@ class ConversationService:
         merged = dict(current_state or {})
         merged.update(generated_state)
         return merged
+
+    def _is_supported_text_message(
+        self,
+        *,
+        message: str,
+        conversation_context: list[str],
+        agent_state: dict | None,
+    ) -> bool:
+        if self._has_math_scope_signal(message):
+            return True
+        return self._is_contextual_math_follow_up(
+            message=message,
+            conversation_context=conversation_context,
+            agent_state=agent_state,
+        )
+
+    def _has_math_scope_signal(self, message: str) -> bool:
+        if self._math_symbol_pattern.search(message):
+            return True
+
+        try:
+            self.parser_service.parse(message)
+            return True
+        except Exception:
+            pass
+
+        knowledge_base = self.topic_explanation_service.knowledge_base_service
+        if knowledge_base.detect_course_hint(message):
+            return True
+        if knowledge_base.has_relevant_context(message):
+            return True
+
+        normalized = normalize_search_text(message)
+        message_tokens = set(tokenize(normalized))
+        return bool(message_tokens.intersection(self._math_scope_tokens))
+
+    def _is_contextual_math_follow_up(
+        self,
+        *,
+        message: str,
+        conversation_context: list[str],
+        agent_state: dict | None,
+    ) -> bool:
+        normalized = normalize_search_text(message)
+        if normalized in self._short_follow_up_messages:
+            return self._has_recent_math_context(conversation_context, agent_state)
+
+        message_tokens = set(tokenize(normalized))
+        if not message_tokens:
+            return False
+
+        if not message_tokens.intersection(self._follow_up_tokens):
+            return False
+
+        return self._has_recent_math_context(conversation_context, agent_state)
+
+    def _has_recent_math_context(
+        self,
+        conversation_context: list[str],
+        agent_state: dict | None,
+    ) -> bool:
+        state = dict(agent_state or {})
+        if state.get("pending_practice") or state.get("last_practice_context"):
+            return True
+
+        if not conversation_context:
+            return False
+
+        joined_context = "\n".join(conversation_context)
+        return self._has_math_scope_signal(joined_context)
 
     def _build_conversation_summary(self, conversation: Conversation) -> ConversationSummary:
         last_message = conversation.messages[-1] if conversation.messages else None
