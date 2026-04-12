@@ -27,6 +27,25 @@ from app.services.topic_explanation_service import TopicExplanationService
 
 
 class ConversationService:
+    _report_topic_keyword_map = {
+        "derivative": ("derivada", "derivadas", "derivative", "derivacion"),
+        "integral": (
+            "integral",
+            "integrales",
+            "integracion",
+            "antiderivada",
+            "antiderivadas",
+            "riemann",
+            "sustitucion",
+            "partes",
+            "fracciones parciales",
+            "trapecio",
+            "trapecios",
+            "simpson",
+        ),
+        "limit": ("limite", "limites", "continuidad", "limit"),
+        "equation": ("ecuacion", "ecuaciones", "equation"),
+    }
     _math_scope_tokens = {
         "calculo",
         "derivada",
@@ -453,6 +472,17 @@ class ConversationService:
             status=MessageStatus.SOLVED.value,
             error_message=None,
         )
+        self._record_topic_event(
+            db=db,
+            conversation=conversation,
+            topic=self._infer_report_topic(
+                raw_input=raw_input,
+                candidate_topics=[
+                    result.references[0].document.topic if result.references else None,
+                ],
+            ),
+            interaction_type="question",
+        )
         summary = result.references[0].document.topic.replace("_", " ") if result.references else raw_input
         self.repository.touch_conversation(
             db,
@@ -484,6 +514,19 @@ class ConversationService:
             content=assistant_text,
             source_type=SourceType.TEXT.value,
             status=MessageStatus.SOLVED.value,
+        )
+        report_topic = self._normalize_report_topic(generated.problem_type or generated.topic)
+        self._record_topic_event(
+            db=db,
+            conversation=conversation,
+            topic=report_topic,
+            interaction_type="question",
+        )
+        self._record_topic_event(
+            db=db,
+            conversation=conversation,
+            topic=report_topic,
+            interaction_type="exercise_generated",
         )
         self.repository.touch_conversation(
             db,
@@ -578,6 +621,26 @@ class ConversationService:
             content=composed.text,
             source_type=SourceType.TEXT.value,
             status=MessageStatus.SOLVED.value,
+        )
+        report_topic = self._infer_report_topic(
+            raw_input=raw_input,
+            candidate_topics=[
+                theory_result.references[0].document.topic if theory_result.references else None,
+                generated.problem_type,
+                generated.topic,
+            ],
+        )
+        self._record_topic_event(
+            db=db,
+            conversation=conversation,
+            topic=report_topic,
+            interaction_type="question",
+        )
+        self._record_topic_event(
+            db=db,
+            conversation=conversation,
+            topic=report_topic,
+            interaction_type="exercise_generated",
         )
         summary = (
             theory_result.references[0].document.topic.replace("_", " ")
@@ -772,6 +835,18 @@ class ConversationService:
             source_type=SourceType.TEXT.value,
             status=MessageStatus.SOLVED.value,
         )
+        self._record_topic_event(
+            db=db,
+            conversation=conversation,
+            topic=self._infer_report_topic(
+                raw_input=raw_input,
+                candidate_topics=[
+                    str(practice_context.get("problem_type") or ""),
+                    str(practice_context.get("topic") or ""),
+                ],
+            ),
+            interaction_type="question",
+        )
         self.repository.touch_conversation(
             db,
             conversation,
@@ -882,6 +957,12 @@ class ConversationService:
         exercise.variable = parsed.variable
         exercise.limit_point = parsed.limit_point
         exercise.parse_notes = parsed.notes
+        self._record_topic_event(
+            db=db,
+            conversation=conversation,
+            topic=parsed.problem_type.value,
+            interaction_type="question",
+        )
 
         try:
             solved = self.solver_service.solve(parsed)
@@ -1031,6 +1112,56 @@ class ConversationService:
 
         joined_context = "\n".join(conversation_context)
         return self._has_math_scope_signal(joined_context)
+
+    def _record_topic_event(
+        self,
+        *,
+        db: Session,
+        conversation: Conversation,
+        topic: str | None,
+        interaction_type: str,
+    ) -> None:
+        normalized_topic = self._normalize_report_topic(topic)
+        if not normalized_topic:
+            return
+        self.repository.create_topic_metric_event(
+            db,
+            user_id=conversation.user_id,
+            conversation_id=conversation.id,
+            topic=normalized_topic,
+            interaction_type=interaction_type,
+        )
+
+    def _infer_report_topic(
+        self,
+        *,
+        raw_input: str,
+        candidate_topics: list[str | None],
+    ) -> str | None:
+        direct_topic = self._normalize_report_topic(raw_input)
+        if direct_topic:
+            return direct_topic
+
+        for candidate in candidate_topics:
+            normalized_candidate = self._normalize_report_topic(candidate)
+            if normalized_candidate:
+                return normalized_candidate
+
+        return None
+
+    def _normalize_report_topic(self, topic: str | None) -> str | None:
+        normalized = normalize_search_text(str(topic or "")).replace("_", " ").strip()
+        if not normalized:
+            return None
+
+        if normalized in {"derivative", "integral", "limit", "equation"}:
+            return normalized
+
+        for canonical_topic, aliases in self._report_topic_keyword_map.items():
+            if any(alias in normalized for alias in aliases):
+                return canonical_topic
+
+        return None
 
     def _build_conversation_summary(self, conversation: Conversation) -> ConversationSummary:
         last_message = conversation.messages[-1] if conversation.messages else None

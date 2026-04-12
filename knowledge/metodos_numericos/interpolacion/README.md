@@ -4,6 +4,7 @@ Temas sembrados:
 
 - lagrange
 - newton
+- interpolacion_por_splines
 
 Nota:
 

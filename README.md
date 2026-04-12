@@ -45,7 +45,7 @@ MVP funcional de una plataforma web para estudiantes que resuelve ejercicios de 
 2. El backend crea o reutiliza un usuario anonimo y una conversacion.
 3. Si la consulta es teorica, el `intent_router_service` la enruta al modo RAG y el `topic_explanation_service` responde usando el corpus en `knowledge/`.
 4. Si la consulta es un ejercicio, el `ocr_service` extrae texto si hace falta, el `math_parser_service` detecta el tipo de problema y el `sympy_solver_service` lo resuelve.
-5. El `explanation_service` genera una explicacion pedagogica usando Ollama o una plantilla de respaldo.
+5. El `explanation_service` genera una explicacion pedagogica usando Ollama.
 6. Se guardan conversacion, mensajes, ejercicio y solucion.
 7. El frontend muestra problema detectado, tipo, resultado y explicacion.
 
@@ -93,7 +93,6 @@ Variables principales:
 - `BACKEND_PORT`
 - `FRONTEND_PORT`
 - `VITE_API_BASE_URL`
-- `OLLAMA_ENABLED`
 - `OLLAMA_BASE_URL`
 - `OLLAMA_MODEL`
 - `OLLAMA_TIMEOUT_SECONDS`
@@ -109,7 +108,6 @@ Variables clave:
 
 - `DATABASE_URL`
 - `CORS_ORIGINS`
-- `OLLAMA_ENABLED`
 - `OLLAMA_BASE_URL`
 - `OLLAMA_MODEL`
 - `OCR_PROVIDER`
@@ -139,14 +137,13 @@ Servicios:
 - OpenAPI: `http://localhost:8000/docs`
 - PostgreSQL: `localhost:5432`
 
-### Activar Ollama
+### Configurar Ollama
 
 Si ya tienes Ollama corriendo fuera del stack:
 
 ```env
-OLLAMA_ENABLED=true
 OLLAMA_BASE_URL=http://host.docker.internal:11434
-OLLAMA_MODEL=llama3.2:3b
+OLLAMA_MODEL=deepseek-r1:8b
 ```
 
 Si quieres levantar el contenedor opcional:
@@ -212,7 +209,7 @@ Comportamientos de error:
 - mensaje claro si el OCR falla,
 - mensaje claro si el parser no entiende el ejercicio,
 - mensaje claro si SymPy no logra resolver el caso,
-- mensaje claro si el corpus teorico no tiene suficiente contexto todavia.
+- error explicito si Ollama no esta disponible.
 
 ## Verificacion realizada
 
@@ -224,7 +221,7 @@ Comportamientos de error:
 
 - Se usa un usuario anonimo simple almacenado en `localStorage` para evitar una capa de autenticacion prematura.
 - El OCR esta detras de una interfaz; Tesseract es la implementacion inicial por costo y RAM moderados.
-- La explicacion no depende obligatoriamente de Ollama: si el modelo no esta disponible, el sistema usa una explicacion base para no romper el MVP.
+- Ollama es obligatorio para el flujo conversacional, la explicacion teorica y la practica guiada.
 - `messages`, `exercises` y `solved_exercises` estan separados para conservar trazabilidad entre entrada, extraccion matematica y salida final.
 - El backend usa Python 3.12 en Docker por estabilidad del stack FastAPI/Pydantic.
 

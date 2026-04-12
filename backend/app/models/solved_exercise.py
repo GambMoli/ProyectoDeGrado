@@ -22,7 +22,7 @@ class SolvedExercise(Base):
     final_result: Mapped[str] = mapped_column(Text, nullable=False)
     steps_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     explanation_text: Mapped[str] = mapped_column(Text, nullable=False)
-    explanation_source: Mapped[str] = mapped_column(String(30), nullable=False, default="template")
+    explanation_source: Mapped[str] = mapped_column(String(30), nullable=False, default="ollama")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

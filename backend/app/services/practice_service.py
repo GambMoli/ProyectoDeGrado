@@ -3,10 +3,9 @@ from __future__ import annotations
 import json
 import logging
 import re
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from sympy import Symbol, latex, series, simplify
+from sympy import Symbol, series
 from sympy.parsing.sympy_parser import (
     convert_xor,
     implicit_multiplication_application,
@@ -20,55 +19,38 @@ from app.services.knowledge_base_service import (
     normalize_search_text,
     tokenize,
 )
-from app.services.math_parser_service import MathParserService, ParsedExercise
+from app.services.math_parser_service import MathParserService
 from app.services.ollama_client import OllamaClient, OllamaClientError
+from app.services.practice import (
+    PracticeGenerationResult,
+    PracticeGradeResult,
+    PracticeStrategy,
+    PracticeTemplate,
+    answers_match,
+    build_correct_feedback,
+    build_practice_prompt,
+    build_state_from_pending,
+    build_symbolic_exercise_text,
+    build_updated_history,
+    compact_practice_context,
+    extract_json,
+    extract_student_answer,
+    fallback_incorrect_feedback,
+    fallback_practice_context_explanation,
+    format_history_block,
+    format_reference_context,
+    get_practice_history,
+    history_topic_count,
+    keywords_from_references,
+    reference_summary,
+)
 from app.services.sympy_solver_service import SymPySolverService
 from app.utils.llm_text import normalize_llm_math_text
-from app.utils.expression_normalizer import normalize_text
 
 if TYPE_CHECKING:
     from app.core.config import Settings
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(slots=True)
-class PracticeGenerationResult:
-    text: str
-    state: dict
-    exercise_text: str
-    hint: str
-    topic: str
-    problem_type: str
-
-
-@dataclass(slots=True)
-class PracticeGradeResult:
-    text: str
-    is_correct: bool
-    next_state: dict
-
-
-@dataclass(slots=True)
-class PracticeTemplate:
-    topic: str
-    problem_type: str
-    exercise_text: str
-    hint: str
-    grading_mode: str = "symbolic"
-    raw_input: str | None = None
-    expected_answer: str | None = None
-    expected_sympy_input: str | None = None
-    rubric: str | None = None
-    reference_summary: str | None = None
-    keywords: list[str] | None = None
-
-
-@dataclass(slots=True)
-class PracticeStrategy:
-    topic: str
-    generator_mode: str
-    references: list[KnowledgeSearchResult]
 
 
 class PracticeService:
@@ -158,7 +140,11 @@ class PracticeService:
 
         state = current_state or {}
         template = self._select_template(request_text=request_text, current_state=state)
-        history = self._build_updated_history(current_state=state, template=template)
+        history = build_updated_history(
+            current_state=state,
+            template=template,
+            history_limit=self._history_limit,
+        )
         exercise_text = template.exercise_text
 
         if template.raw_input and not template.expected_answer:
@@ -167,7 +153,11 @@ class PracticeService:
             expected_answer = solved.final_result
             expected_sympy_input = solved.sympy_input
             problem_type = parsed.problem_type.value
-            exercise_text = self._build_symbolic_exercise_text(parsed)
+            exercise_text = build_symbolic_exercise_text(
+                parsed,
+                local_dict=self.local_dict,
+                transformations=self._transformations,
+            )
         else:
             expected_answer = str(template.expected_answer or "").strip()
             expected_sympy_input = str(template.expected_sympy_input or expected_answer).strip()
@@ -189,7 +179,7 @@ class PracticeService:
             "attempts": 0,
             "practice_history": history,
         }
-        text = self._build_practice_prompt(
+        text = build_practice_prompt(
             exercise_text=exercise_text,
             hint=template.hint,
         )
@@ -209,7 +199,7 @@ class PracticeService:
         if not self.ollama_client:
             raise RuntimeError("OllamaClient no esta configurado.")
 
-        student_answer = self._extract_student_answer(student_message)
+        student_answer = extract_student_answer(student_message)
         attempts = int(pending_practice.get("attempts", 0)) + 1
         grading_mode = str(pending_practice.get("grading_mode") or "symbolic")
 
@@ -222,14 +212,16 @@ class PracticeService:
 
         expected_answer = str(pending_practice.get("expected_answer", "")).strip()
         problem_type = str(pending_practice.get("problem_type") or "")
-        is_correct = self._answers_match(
+        is_correct = answers_match(
             expected_answer=expected_answer,
             student_answer=student_answer,
             problem_type=problem_type,
+            local_dict=self.local_dict,
+            transformations=self._transformations,
         )
 
         if is_correct:
-            text = self._build_correct_feedback(
+            text = build_correct_feedback(
                 exercise_text=str(pending_practice.get("exercise_text", "")),
                 student_answer=student_answer,
                 expected_answer=expected_answer,
@@ -237,14 +229,14 @@ class PracticeService:
             return PracticeGradeResult(
                 text=text,
                 is_correct=True,
-                next_state=self._build_state_from_pending(
+                next_state=build_state_from_pending(
                     pending_practice,
                     attempts=attempts,
                     last_outcome="correct",
                 ),
             )
 
-        next_state = self._build_state_from_pending(
+        next_state = build_state_from_pending(
             pending_practice,
             attempts=attempts,
             keep_pending=True,
@@ -300,14 +292,14 @@ Explica este mismo ejercicio de forma guiada.
             )
             return normalize_llm_math_text(text)
         except OllamaClientError:
-            return self._fallback_practice_context_explanation(
+            return fallback_practice_context_explanation(
                 exercise_text=str(practice_context.get("exercise_text", "")),
                 expected_answer=str(practice_context.get("expected_answer", "")),
                 hint=str(practice_context.get("hint", "")),
             )
 
     def _select_template(self, *, request_text: str, current_state: dict) -> PracticeTemplate:
-        history = self._get_practice_history(current_state)
+        history = get_practice_history(current_state, history_limit=self._history_limit)
         strategy = self._infer_practice_strategy(
             request_text=request_text,
             current_state=current_state,
@@ -447,16 +439,16 @@ Solicitud del estudiante:
 {request_text}
 
 Practica activa:
-{json.dumps(self._compact_practice_context(pending_practice), ensure_ascii=False)}
+{json.dumps(compact_practice_context(pending_practice), ensure_ascii=False)}
 
 Practica reciente:
-{json.dumps(self._compact_practice_context(last_practice_context), ensure_ascii=False)}
+{json.dumps(compact_practice_context(last_practice_context), ensure_ascii=False)}
 
 Historial reciente de ejercicios:
-{self._format_history_block(history)}
+{format_history_block(history)}
 
 Referencias del corpus:
-{self._format_reference_context(reference_pool)}
+{format_reference_context(reference_pool)}
 
 Elige:
 - topic: derivative | integral | limit | equation | serie_de_taylor | biseccion | newton_raphson | regula_falsi | punto_fijo | lagrange | interpolacion_newton | trapecios | simpson_1_3 | calculo_1 | calculo_2 | metodos_numericos
@@ -483,7 +475,7 @@ Devuelve solo JSON valido:
                 prompt=prompt,
                 temperature=0.2,
             )
-            payload = self._extract_json(raw)
+            payload = extract_json(raw)
         except (OllamaClientError, ValueError, json.JSONDecodeError):
             return None
 
@@ -618,8 +610,8 @@ Devuelve solo JSON valido:
             "limit": "limites",
             "equation": "ecuaciones",
         }[topic]
-        reference_context = self._format_reference_context(references)
-        history_block = self._format_history_block(history)
+        reference_context = format_reference_context(references)
+        history_block = format_history_block(history)
         requested_topic_line = f"Tema del corpus a respetar: {requested_topic}\n" if requested_topic else ""
         prompt = f"""
 Solicitud del estudiante:
@@ -661,7 +653,7 @@ Devuelve solo JSON valido:
                 prompt=prompt,
                 temperature=0.7,
             )
-            payload = self._extract_json(raw)
+            payload = extract_json(raw)
             raw_input = str(payload.get("raw_input", "")).strip()
             exercise_text = str(payload.get("exercise_text", "")).strip()
             hint = str(payload.get("hint", "")).strip()
@@ -669,7 +661,11 @@ Devuelve solo JSON valido:
                 raise ValueError("Missing symbolic practice fields.")
             parsed = self.parser_service.parse(raw_input)
             solved = self.solver_service.solve(parsed)
-            exercise_text = self._build_symbolic_exercise_text(parsed)
+            exercise_text = build_symbolic_exercise_text(
+                parsed,
+                local_dict=self.local_dict,
+                transformations=self._transformations,
+            )
             return PracticeTemplate(
                 topic=requested_topic or topic,
                 problem_type=parsed.problem_type.value,
@@ -679,16 +675,16 @@ Devuelve solo JSON valido:
                 expected_answer=solved.final_result,
                 expected_sympy_input=solved.sympy_input,
                 grading_mode="symbolic",
-                reference_summary=self._reference_summary(references),
-                keywords=self._keywords_from_references(references),
+                reference_summary=reference_summary(references),
+                keywords=keywords_from_references(references),
             )
         except Exception as exc:
             logger.warning("Falling back to deterministic symbolic practice for %s: %s", topic, exc)
             return self._build_fallback_template(
                 topic=topic,
                 history=history,
-                reference_summary=self._reference_summary(references),
-                keywords=self._keywords_from_references(references),
+                reference_summary=reference_summary(references),
+                keywords=keywords_from_references(references),
                 topic_label=requested_topic or topic,
             )
 
@@ -702,8 +698,8 @@ Devuelve solo JSON valido:
         if not self.ollama_client:
             raise RuntimeError("OllamaClient no esta configurado.")
 
-        reference_context = self._format_reference_context(references)
-        history_block = self._format_history_block(history)
+        reference_context = format_reference_context(references)
+        history_block = format_history_block(history)
         prompt = f"""
 Solicitud del estudiante:
 {request_text}
@@ -748,7 +744,7 @@ Devuelve solo JSON valido:
                 prompt=prompt,
                 temperature=0.65,
             )
-            payload = self._extract_json(raw)
+            payload = extract_json(raw)
             function_expr = str(payload.get("function_expr", "")).strip()
             center = str(payload.get("center", "0")).strip() or "0"
             order = int(payload.get("order", 3))
@@ -783,16 +779,16 @@ Devuelve solo JSON valido:
                 expected_answer=expected,
                 expected_sympy_input=expected,
                 grading_mode="symbolic",
-                reference_summary=self._reference_summary(references),
-                keywords=self._keywords_from_references(references),
+                reference_summary=reference_summary(references),
+                keywords=keywords_from_references(references),
             )
         except Exception as exc:
             logger.warning("Falling back to deterministic Taylor practice: %s", exc)
             return self._build_fallback_template(
                 topic="serie_de_taylor",
                 history=history,
-                reference_summary=self._reference_summary(references),
-                keywords=self._keywords_from_references(references),
+                reference_summary=reference_summary(references),
+                keywords=keywords_from_references(references),
             )
 
     def _build_llm_grounded_template(
@@ -814,10 +810,10 @@ Tema solicitado o inferido:
 {requested_topic or references[0].document.topic}
 
 Contexto del corpus:
-{self._format_reference_context(references)}
+{format_reference_context(references)}
 
 Ejercicios recientes para NO repetir:
-{self._format_history_block(history)}
+{format_history_block(history)}
 
 Genera un solo ejercicio breve y util.
 - Usa el corpus como base, pero redacta y construye una variante nueva.
@@ -841,7 +837,7 @@ Devuelve solo JSON valido con esta forma:
                 prompt=prompt,
                 temperature=0.65,
             )
-            payload = self._extract_json(raw)
+            payload = extract_json(raw)
             exercise_text = str(payload.get("exercise_text", "")).strip()
             expected_answer = str(payload.get("expected_answer", "")).strip()
             hint = str(payload.get("hint", "")).strip()
@@ -858,8 +854,8 @@ Devuelve solo JSON valido con esta forma:
                 expected_answer=expected_answer,
                 hint=hint,
                 rubric=rubric or f"La respuesta debe centrarse en {references[0].document.title}.",
-                reference_summary=self._reference_summary(references),
-                keywords=keywords or self._keywords_from_references(references),
+                reference_summary=reference_summary(references),
+                keywords=keywords or keywords_from_references(references),
             )
         except Exception as exc:
             logger.warning("Falling back to conceptual practice for %s: %s", requested_topic, exc)
@@ -875,8 +871,8 @@ Devuelve solo JSON valido con esta forma:
                 expected_answer=reference.document.text,
                 hint="Piensa en la definicion central y en para que sirve el metodo o concepto.",
                 rubric=f"La respuesta debe recoger la idea principal de {reference.document.title} y un uso razonable.",
-                reference_summary=self._reference_summary(references),
-                keywords=self._keywords_from_references(references),
+                reference_summary=reference_summary(references),
+                keywords=keywords_from_references(references),
             )
 
     def _build_fallback_template(
@@ -888,7 +884,7 @@ Devuelve solo JSON valido con esta forma:
         keywords: list[str] | None = None,
         topic_label: str | None = None,
     ) -> PracticeTemplate:
-        signature_count = self._history_topic_count(history, topic_label or topic)
+        signature_count = history_topic_count(history, topic_label or topic)
         if topic == "integral":
             options = (
                 PracticeTemplate(
@@ -1051,28 +1047,6 @@ Devuelve solo JSON valido con esta forma:
         )
         return options[signature_count % len(options)]
 
-    @staticmethod
-    def _build_practice_prompt(*, exercise_text: str, hint: str) -> str:
-        return (
-            "Vamos con un ejercicio para practicar.\n\n"
-            f"Ejercicio:\n{exercise_text}\n\n"
-            "Intentalo por tu cuenta primero. Puedes escribirme solo el resultado o contarme el procedimiento.\n\n"
-            f"Pista:\n{hint}"
-        )
-
-    def _build_correct_feedback(
-        self,
-        *,
-        exercise_text: str,
-        student_answer: str,
-        expected_answer: str,
-    ) -> str:
-        return (
-            f"Si, ese resultado esta correcto: {expected_answer}. "
-            "Coincide con la respuesta esperada y la idea del ejercicio esta bien aplicada. "
-            "Si quieres, ahora revisamos el procedimiento paso a paso o te propongo uno un poco mas retador."
-        )
-
     def _build_incorrect_feedback(
         self,
         *,
@@ -1117,122 +1091,12 @@ Redacta una devolucion breve, natural y pedagogica.
             ).strip()
             return normalize_llm_math_text(text)
         except OllamaClientError:
-            return self._fallback_incorrect_feedback(
+            return fallback_incorrect_feedback(
                 student_answer=student_answer,
                 expected_answer=expected_answer,
                 hint=hint,
                 attempts=attempts,
             )
-
-    @staticmethod
-    def _extract_student_answer(message: str) -> str:
-        normalized = normalize_text(message)
-        lowered = normalized.lower()
-        answer = re.sub(
-            r"(?i)^(el resultado es|mi resultado es|mi respuesta es|resultado:|respuesta:|creo que es|es)\s*",
-            "",
-            normalized,
-        ).strip()
-        if "=" in answer and any(token in lowered for token in ["resultado", "respuesta", "derivada", "integral"]):
-            answer = answer.split("=", maxsplit=1)[1].strip()
-        return answer
-
-    def _answers_match(
-        self,
-        *,
-        expected_answer: str,
-        student_answer: str,
-        problem_type: str = "",
-    ) -> bool:
-        if not student_answer:
-            return False
-
-        expected = expected_answer.strip()
-        student = student_answer.strip()
-
-        expected = expected.replace("+ C", "+ c").replace("+C", "+c")
-        student = student.replace("+ C", "+ c").replace("+C", "+c")
-
-        if expected == student:
-            return True
-
-        if expected.startswith("x = "):
-            expected = expected.split("=", maxsplit=1)[1].strip()
-        if student.startswith("x = "):
-            student = student.split("=", maxsplit=1)[1].strip()
-
-        try:
-            expected_expr = parse_expr(
-                expected,
-                local_dict=self.local_dict.copy(),
-                transformations=self._transformations,
-                evaluate=True,
-            )
-            student_expr = parse_expr(
-                student,
-                local_dict=self.local_dict.copy(),
-                transformations=self._transformations,
-                evaluate=True,
-            )
-            if problem_type == "integral" and self._integral_answers_match(
-                expected_expr=expected_expr,
-                student_expr=student_expr,
-            ):
-                return True
-            difference = simplify(expected_expr - student_expr)
-            return difference == 0
-        except Exception:
-            try:
-                expected_eq = parse_expr(expected.replace("=", "-(") + ")", local_dict=self.local_dict.copy())
-                student_eq = parse_expr(student.replace("=", "-(") + ")", local_dict=self.local_dict.copy())
-                return simplify(expected_eq - student_eq) == 0
-            except Exception:
-                return False
-
-    @staticmethod
-    def _integral_answers_match(*, expected_expr, student_expr) -> bool:
-        free_symbols = sorted(
-            {
-                symbol
-                for symbol in expected_expr.free_symbols.union(student_expr.free_symbols)
-                if symbol.name != "c"
-            },
-            key=lambda item: item.name,
-        )
-        variable = free_symbols[0] if free_symbols else Symbol("x")
-        return simplify((expected_expr - student_expr).diff(variable)) == 0
-
-    @staticmethod
-    def _fallback_incorrect_feedback(
-        *,
-        student_answer: str,
-        expected_answer: str,
-        hint: str,
-        attempts: int,
-    ) -> str:
-        if attempts <= 1:
-            return (
-                "No coincide todavia con la respuesta esperada. "
-                f"Revisa tu expresion y usa esta pista: {hint}"
-            )
-        return (
-            "Aun hay un detalle por corregir. "
-            f"La referencia esperada es {expected_answer}. "
-            "Comparala con tu resultado y ajusta el paso donde te desviaste."
-        )
-
-    @staticmethod
-    def _fallback_practice_context_explanation(
-        *,
-        exercise_text: str,
-        expected_answer: str,
-        hint: str,
-    ) -> str:
-        return (
-            f"Vamos a desarrollar este ejercicio: {exercise_text} "
-            f"La referencia correcta es {expected_answer}. "
-            f"La idea clave para resolverlo es: {hint}"
-        ).strip()
 
     def _fallback_llm_rubric_grade(
         self,
@@ -1263,7 +1127,7 @@ Redacta una devolucion breve, natural y pedagogica.
                 f"Apoyate en esta pista: {pending_practice.get('hint', '')}"
             ).strip()
 
-        next_state = self._build_state_from_pending(
+        next_state = build_state_from_pending(
             pending_practice,
             attempts=attempts,
             keep_pending=not is_correct,
@@ -1315,11 +1179,11 @@ Devuelve solo JSON valido:
                 prompt=prompt,
                 temperature=0.25,
             )
-            payload = self._extract_json(raw)
+            payload = extract_json(raw)
             is_correct = bool(payload.get("is_correct"))
             feedback = str(payload.get("feedback", "")).strip()
             if feedback:
-                next_state = self._build_state_from_pending(
+                next_state = build_state_from_pending(
                     pending_practice,
                     attempts=attempts,
                     keep_pending=not is_correct,
@@ -1338,208 +1202,3 @@ Devuelve solo JSON valido:
             student_answer=student_answer,
             attempts=attempts,
         )
-
-    def _build_state_from_pending(
-        self,
-        pending_practice: dict,
-        *,
-        attempts: int | None = None,
-        keep_pending: bool = False,
-        last_outcome: str | None = None,
-    ) -> dict:
-        history = list(pending_practice.get("practice_history") or [])
-        next_state: dict = {"practice_history": history}
-        if keep_pending:
-            next_state["pending_practice"] = {
-                **pending_practice,
-                "attempts": attempts if attempts is not None else int(pending_practice.get("attempts", 0)),
-            }
-        else:
-            next_state["last_practice_context"] = self._snapshot_practice_context(
-                pending_practice,
-                attempts=attempts,
-                last_outcome=last_outcome or "completed",
-            )
-        return next_state
-
-    @staticmethod
-    def _snapshot_practice_context(
-        practice_context: dict,
-        *,
-        attempts: int | None = None,
-        last_outcome: str = "completed",
-    ) -> dict:
-        return {
-            "topic": practice_context.get("topic"),
-            "problem_type": practice_context.get("problem_type"),
-            "raw_input": practice_context.get("raw_input"),
-            "exercise_text": practice_context.get("exercise_text"),
-            "expected_answer": practice_context.get("expected_answer"),
-            "expected_sympy_input": practice_context.get("expected_sympy_input"),
-            "hint": practice_context.get("hint"),
-            "grading_mode": practice_context.get("grading_mode"),
-            "rubric": practice_context.get("rubric"),
-            "reference_summary": practice_context.get("reference_summary"),
-            "keywords": list(practice_context.get("keywords") or []),
-            "attempts": attempts if attempts is not None else int(practice_context.get("attempts", 0)),
-            "practice_history": list(practice_context.get("practice_history") or []),
-            "status": "completed",
-            "last_outcome": last_outcome,
-        }
-
-    def _get_practice_history(self, current_state: dict) -> list[dict]:
-        history = list((current_state or {}).get("practice_history") or [])
-        cleaned_history: list[dict] = []
-        for entry in history[-self._history_limit :]:
-            if isinstance(entry, dict):
-                cleaned_history.append(
-                    {
-                        "topic": str(entry.get("topic", "")).strip(),
-                        "signature": str(entry.get("signature", "")).strip(),
-                        "exercise_text": str(entry.get("exercise_text", "")).strip(),
-                    }
-                )
-        return cleaned_history
-
-    def _build_updated_history(self, *, current_state: dict, template: PracticeTemplate) -> list[dict]:
-        history = self._get_practice_history(current_state)
-        signature_source = template.raw_input or template.expected_sympy_input or template.exercise_text
-        history.append(
-            {
-                "topic": template.topic,
-                "signature": signature_source.strip(),
-                "exercise_text": template.exercise_text.strip(),
-            }
-        )
-        return history[-self._history_limit :]
-
-    @staticmethod
-    def _format_reference_context(references: list[KnowledgeSearchResult]) -> str:
-        if not references:
-            return "Sin referencias del corpus."
-
-        blocks = []
-        for index, reference in enumerate(references[:4], start=1):
-            doc = reference.document
-            blocks.append(
-                f"[{index}] curso={doc.course}; unidad={doc.unit}; tema={doc.topic}; "
-                f"subtema={doc.subtopic}; texto={doc.text}"
-            )
-        return "\n".join(blocks)
-
-    @staticmethod
-    def _format_history_block(history: list[dict]) -> str:
-        if not history:
-            return "No hay historial previo."
-        lines = []
-        for entry in history[-4:]:
-            topic = entry.get("topic", "")
-            signature = entry.get("signature", "")
-            lines.append(f"- {topic}: {signature}")
-        return "\n".join(lines)
-
-    @staticmethod
-    def _compact_practice_context(practice_context: dict) -> dict:
-        if not practice_context:
-            return {}
-        return {
-            "topic": practice_context.get("topic"),
-            "problem_type": practice_context.get("problem_type"),
-            "exercise_text": practice_context.get("exercise_text"),
-            "last_outcome": practice_context.get("last_outcome"),
-            "status": practice_context.get("status"),
-        }
-
-    def _build_symbolic_exercise_text(self, parsed: ParsedExercise) -> str:
-        instruction = {
-            "integral": "Calcula la integral indefinida de la funcion:",
-            "derivative": "Calcula la derivada de la funcion:",
-            "limit": "Calcula el limite:",
-            "equation": "Resuelve la ecuacion:",
-            "simplification": "Simplifica la expresion:",
-        }.get(parsed.problem_type.value, "Trabaja este ejercicio:")
-        formula = self._build_display_formula(parsed)
-        return f"{instruction}\n\\[\n{formula}\n\\]"
-
-    def _build_display_formula(self, parsed: ParsedExercise) -> str:
-        if parsed.problem_type.value == "integral":
-            variable = parsed.variable or "x"
-            expression = self._expression_to_latex(parsed.expression)
-            return f"\\int {expression}\\, d{variable}"
-
-        if parsed.problem_type.value == "derivative":
-            variable = parsed.variable or "x"
-            expression = self._expression_to_latex(parsed.expression)
-            return f"\\frac{{d}}{{d{variable}}}\\left({expression}\\right)"
-
-        if parsed.problem_type.value == "limit":
-            variable = parsed.variable or "x"
-            point = parsed.limit_point or "0"
-            expression = self._expression_to_latex(parsed.expression)
-            return f"\\lim_{{{variable} \\to {point}}} {expression}"
-
-        if parsed.problem_type.value == "equation" and "=" in parsed.expression:
-            left, right = parsed.expression.split("=", maxsplit=1)
-            return f"{self._expression_to_latex(left)} = {self._expression_to_latex(right)}"
-
-        return self._expression_to_latex(parsed.expression)
-
-    def _expression_to_latex(self, expression: str) -> str:
-        normalized = normalize_text(expression).strip()
-        try:
-            parsed_expression = parse_expr(
-                normalized,
-                local_dict=self.local_dict.copy(),
-                transformations=self._transformations,
-                evaluate=False,
-            )
-            return latex(parsed_expression)
-        except Exception:
-            fallback = normalized.replace("**", "^").replace("*", " ")
-            fallback = re.sub(r"exp\(([^()]+)\)", r"e^{\1}", fallback)
-            return fallback
-
-    @staticmethod
-    def _reference_summary(references: list[KnowledgeSearchResult]) -> str | None:
-        if not references:
-            return None
-        return " ".join(reference.document.text for reference in references[:2]).strip()
-
-    @staticmethod
-    def _keywords_from_references(references: list[KnowledgeSearchResult]) -> list[str]:
-        keywords: list[str] = []
-        for reference in references:
-            keywords.extend(reference.document.tags)
-        seen: set[str] = set()
-        deduped: list[str] = []
-        for keyword in keywords:
-            if keyword in seen:
-                continue
-            seen.add(keyword)
-            deduped.append(keyword)
-        return deduped[:6]
-
-    @staticmethod
-    def _history_topic_count(history: list[dict], topic: str) -> int:
-        return sum(1 for entry in history if str(entry.get("topic", "")).strip() == topic)
-
-    @staticmethod
-    def _extract_json(raw: str) -> dict:
-        raw = raw.strip()
-        if raw.startswith("```json"):
-            raw = raw[7:]
-        if raw.endswith("```"):
-            raw = raw[:-3]
-
-        match = re.search(r"\{.*\}", raw, re.DOTALL)
-        if not match:
-            raise ValueError(f"No JSON object found in practice response. Raw: {raw}")
-        json_str = match.group(0)
-
-        json_str = re.sub(r'\\(?=[^"\\/bfnrtu])', r'\\\\', json_str)
-
-        try:
-            return json.loads(json_str)
-        except json.JSONDecodeError as exc:
-            logger.error("JSON parse error: %s - Raw string: %s", exc, json_str)
-            raise ValueError(f"Invalid JSON generated: {exc}") from exc

@@ -5,6 +5,7 @@
 - Ubuntu 22.04 o 24.04
 - 2 vCPU y 4 GB RAM como base razonable para el MVP
 - Docker y Docker Compose plugin
+- Ollama disponible local o remotamente
 
 ## 1. Instalar Docker
 
@@ -23,7 +24,7 @@ sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin d
 sudo usermod -aG docker $USER
 ```
 
-Abre una sesión nueva después de agregar tu usuario al grupo `docker`.
+Abre una sesion nueva despues de agregar tu usuario al grupo `docker`.
 
 ## 2. Clonar el proyecto
 
@@ -35,7 +36,7 @@ cp .env.example .env
 
 ## 3. Configurar variables
 
-Edita `.env` con lo mínimo:
+Edita `.env` con lo minimo:
 
 ```env
 POSTGRES_DB=calc_tutor
@@ -44,16 +45,11 @@ POSTGRES_PASSWORD=cambia_esta_clave
 BACKEND_PORT=8000
 FRONTEND_PORT=8080
 VITE_API_BASE_URL=http://TU_IP_O_DOMINIO:8000/api
-OLLAMA_ENABLED=false
-```
-
-Si vas a usar Ollama remoto:
-
-```env
-OLLAMA_ENABLED=true
 OLLAMA_BASE_URL=http://127.0.0.1:11434
-OLLAMA_MODEL=llama3.2:3b
+OLLAMA_MODEL=deepseek-r1:8b
 ```
+
+Si vas a usar Ollama remoto, cambia `OLLAMA_BASE_URL` al host correspondiente.
 
 ## 4. Levantar el stack
 
@@ -70,15 +66,15 @@ docker compose logs -f backend
 
 ## 5. Exponer con Nginx opcional
 
-Si quieres publicar con un único punto de entrada:
+Si quieres publicar con un unico punto de entrada:
 
 ```bash
 docker compose --profile proxy up -d --build
 ```
 
-Con esto tendrás:
+Con esto tendras:
 
-- Frontend y backend detrás de `nginx`
+- Frontend y backend detras de `nginx`
 - API accesible por `/api`
 - Docs de FastAPI accesibles por `/docs`
 
@@ -86,18 +82,17 @@ Con esto tendrás:
 
 Opciones simples:
 
-- Poner este stack detrás de un Nginx del host con Certbot.
+- Poner este stack detras de un Nginx del host con Certbot.
 - Usar un proxy externo como Caddy o Traefik.
 
-
-## 7. Actualizar la aplicación
+## 7. Actualizar la aplicacion
 
 ```bash
 git pull
 docker compose up -d --build
 ```
 
-## 8. Backups mínimos
+## 8. Backups minimos
 
 Base de datos:
 
@@ -105,14 +100,14 @@ Base de datos:
 docker exec calc-tutor-db pg_dump -U postgres calc_tutor > backup.sql
 ```
 
-Volúmenes:
+Volumenes:
 
 - `postgres_data`
 - `ollama_data` si usas el perfil de Ollama
 
-## 9. Observabilidad mínima
+## 9. Observabilidad minima
 
-Comandos útiles:
+Comandos utiles:
 
 ```bash
 docker compose logs -f backend
@@ -122,7 +117,5 @@ docker stats
 
 ## 10. Recomendaciones de costo
 
-- Empieza sin contenedor de Ollama si el VPS es pequeño.
-- Usa el modo de explicación por plantilla mientras validas usuarios.
-- Si activas Ollama local, usa un modelo pequeño de 3B o similar.
-- Mantén PostgreSQL en el mismo host al inicio para reducir complejidad.
+- Considera un modelo pequeno de 3B o similar si el VPS es ajustado.
+- Manten PostgreSQL en el mismo host al inicio para reducir complejidad.

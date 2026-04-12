@@ -3,7 +3,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_conversation_service, get_db
+from app.api.dependencies import get_conversation_service, get_current_user, get_db
+from app.models.user import User
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.services.conversation_service import ConversationService
 
@@ -14,8 +15,10 @@ router = APIRouter()
 def process_chat_message(
     payload: ChatRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     conversation_service: ConversationService = Depends(get_conversation_service),
 ) -> ChatResponse:
+    payload.user_id = current_user.id
     return conversation_service.process_text_message(db=db, payload=payload)
 
 
@@ -26,10 +29,10 @@ def process_chat_message(
 )
 async def upload_exercise_image(
     file: UploadFile = File(...),
-    user_id: str | None = Form(default=None),
     conversation_id: str | None = Form(default=None),
     prompt: str | None = Form(default=None),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     conversation_service: ConversationService = Depends(get_conversation_service),
 ) -> ChatResponse:
     if not file.content_type or not file.content_type.startswith("image/"):
@@ -50,7 +53,7 @@ async def upload_exercise_image(
         image_bytes=image_bytes,
         filename=file.filename or "exercise-image",
         content_type=file.content_type,
-        user_id=user_id,
+        user_id=current_user.id,
         conversation_id=conversation_id,
         prompt=prompt,
     )

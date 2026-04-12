@@ -16,12 +16,12 @@ def healthcheck(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings_dependency),
     conversation_service: ConversationService = Depends(get_conversation_service),
-) -> dict[str, str | bool | int]:
+) -> dict[str, str | int]:
     db.execute(text("SELECT 1"))
     return {
         "status": "ok",
         "database": "up",
         "ocr_provider": settings.ocr_provider,
-        "ollama_enabled": settings.ollama_enabled,
+        "ollama_model": settings.ollama_model,
         "knowledge_documents": conversation_service.count_knowledge_documents(),
     }

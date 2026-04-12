@@ -10,6 +10,7 @@ from app.models.conversation import Conversation
 from app.models.exercise import Exercise
 from app.models.message import Message
 from app.models.solved_exercise import SolvedExercise
+from app.models.topic_metric_event import TopicMetricEvent
 from app.models.user import User
 
 _UNSET = object()
@@ -127,6 +128,25 @@ class ConversationRepository:
         db.add(solved)
         db.flush()
         return solved
+
+    def create_topic_metric_event(
+        self,
+        db: Session,
+        *,
+        user_id: str,
+        conversation_id: str,
+        topic: str,
+        interaction_type: str,
+    ) -> TopicMetricEvent:
+        event = TopicMetricEvent(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            topic=topic,
+            interaction_type=interaction_type,
+        )
+        db.add(event)
+        db.flush()
+        return event
 
     def touch_conversation(
         self,

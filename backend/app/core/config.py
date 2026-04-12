@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     environment: str = "development"
     debug: bool = False
     api_prefix: str = "/api"
+    teacher_access_code: str | None = "cubik-teacher"
+    auth_session_ttl_hours: int = 24 * 7
 
     database_url: str = Field(
         default="postgresql+psycopg://postgres:postgres@db:5432/calc_tutor"

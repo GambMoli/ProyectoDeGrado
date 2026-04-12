@@ -14,6 +14,9 @@ class User(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     display_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True, index=True)
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default="student")
     is_anonymous: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -23,6 +26,11 @@ class User(Base):
 
     conversations = relationship(
         "Conversation",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    auth_sessions = relationship(
+        "AuthSession",
         back_populates="user",
         cascade="all, delete-orphan",
     )
