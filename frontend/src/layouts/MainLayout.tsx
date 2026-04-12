@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import MenuIcon from "@mui/icons-material/Menu";
 import NotificationsNoneOutlinedIcon from "@mui/icons-material/NotificationsNoneOutlined";
-import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import {
   AppBar,
   Avatar,
@@ -14,6 +13,7 @@ import {
   useMediaQuery,
   useTheme,
 } from "@mui/material";
+import { useLocation } from "react-router-dom";
 
 import { logoutRequest } from "../api/client";
 import { Sidebar } from "../components";
@@ -25,15 +25,42 @@ interface MainLayoutProps {
   onOpenAttach?: () => void;
 }
 
+const collapsedWidth = 72;
+const expandedWidth = 280;
+
+function getPageHeading(pathname: string) {
+  if (pathname === "/reports") {
+    return {
+      eyebrow: "Scholar Pro",
+      title: "Panel de Reportes",
+      subtitle: "Analitica academica y seguimiento de actividad",
+    };
+  }
+
+  return {
+    eyebrow: "Cubik IA",
+    title: "Asistente de Aprendizaje",
+    subtitle: "Chat educativo con enfoque en resolucion y practica matematica",
+  };
+}
+
 export function MainLayout({ children, onOpenHistory, onOpenAttach }: MainLayoutProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
-  const drawerWidth = 260;
+  const location = useLocation();
   const { user, logout } = useAuth();
+  const currentWidth = isMobile ? expandedWidth : isSidebarCollapsed ? collapsedWidth : expandedWidth;
+  const pageHeading = getPageHeading(location.pathname);
 
   function handleDrawerToggle() {
-    setMobileOpen((current) => !current);
+    if (isMobile) {
+      setMobileOpen((current) => !current);
+      return;
+    }
+
+    setIsSidebarCollapsed((current) => !current);
   }
 
   async function handleLogout() {
@@ -47,23 +74,31 @@ export function MainLayout({ children, onOpenHistory, onOpenAttach }: MainLayout
   }
 
   return (
-    <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "#F9FAFB" }}>
-      <Box component="nav" sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}>
+    <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "background.default" }}>
+      <Box component="nav" sx={{ width: { md: currentWidth }, flexShrink: { md: 0 } }}>
         <Drawer
           variant={isMobile ? "temporary" : "permanent"}
           open={isMobile ? mobileOpen : true}
-          onClose={handleDrawerToggle}
+          onClose={() => setMobileOpen(false)}
           ModalProps={{ keepMounted: true }}
           sx={{
             "& .MuiDrawer-paper": {
               boxSizing: "border-box",
-              width: drawerWidth,
-              borderRight: "1px solid #E5E7EB",
-              bgcolor: "#fff",
+              width: currentWidth,
+              bgcolor: "background.paper",
+              transition: theme.transitions.create("width", {
+                duration: theme.transitions.duration.shorter,
+              }),
+              overflowX: "hidden",
             },
           }}
         >
-          <Sidebar onOpenHistory={onOpenHistory} onOpenAttach={onOpenAttach} />
+          <Sidebar
+            collapsed={!isMobile && isSidebarCollapsed}
+            onOpenHistory={onOpenHistory}
+            onOpenAttach={onOpenAttach}
+            onToggleCollapsed={!isMobile ? handleDrawerToggle : undefined}
+          />
         </Drawer>
       </Box>
 
@@ -72,126 +107,93 @@ export function MainLayout({ children, onOpenHistory, onOpenAttach }: MainLayout
           flexGrow: 1,
           display: "flex",
           flexDirection: "column",
-          width: { md: `calc(100% - ${drawerWidth}px)` },
+          width: { md: `calc(100% - ${currentWidth}px)` },
+          minWidth: 0,
         }}
       >
-        <AppBar
-          position="sticky"
-          elevation={0}
-          sx={{ bgcolor: "#fff", color: "#374151", borderBottom: "1px solid #E5E7EB" }}
-        >
-          <Toolbar sx={{ justifyContent: "space-between", minHeight: "64px !important" }}>
-            <Box sx={{ display: "flex", gap: 3, alignItems: "center" }}>
-              {isMobile ? (
-                <IconButton color="inherit" edge="start" onClick={handleDrawerToggle} sx={{ mr: 1 }}>
-                  <MenuIcon />
-                </IconButton>
-              ) : null}
-
-              {!isMobile ? (
-                <Typography variant="h6" sx={{ fontWeight: 800, color: "#1E3A8A" }}>
-                  Cubik IA
-                </Typography>
-              ) : null}
-
-              <Box sx={{ display: { xs: "none", sm: "flex" }, gap: 3 }}>
-                <Typography
-                  variant="body2"
-                  sx={{ fontWeight: 600, cursor: "pointer", "&:hover": { color: "#1E3A8A" } }}
-                >
-                  Pagina Principal
-                </Typography>
-                <Typography
-                  variant="body2"
-                  sx={{ fontWeight: 600, cursor: "pointer", "&:hover": { color: "#1E3A8A" } }}
-                >
-                  Mis cursos
-                </Typography>
-              </Box>
-            </Box>
-
-            <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
-              <IconButton size="small">
-                <NotificationsNoneOutlinedIcon />
-              </IconButton>
-              <IconButton size="small">
-                <ChatBubbleOutlineIcon />
-              </IconButton>
-              <Button
-                onClick={() => void handleLogout()}
-                size="small"
-                sx={{ textTransform: "none", color: "#4B5563", fontWeight: 700 }}
-              >
-                Salir
-              </Button>
-              <Avatar
-                sx={{
-                  width: 32,
-                  height: 32,
-                  bgcolor: "#EED1B4",
-                  fontSize: "0.875rem",
-                  fontWeight: 700,
-                  color: "#9A6A38",
-                }}
-              >
-                {(user?.display_name ?? "US").slice(0, 2).toUpperCase()}
-              </Avatar>
-            </Box>
-          </Toolbar>
-
-          <Box sx={{ bgcolor: "#1E3A8A", color: "#fff", px: { xs: 2, md: 4 } }}>
-            <Box
+        <AppBar position="sticky" color="transparent">
+          <Toolbar
+            sx={{
+              minHeight: "88px !important",
+              px: { xs: 2, md: 4 },
+              gap: 2,
+              bgcolor: "background.paper",
+            }}
+          >
+            <IconButton
+              color="primary"
+              edge="start"
+              onClick={handleDrawerToggle}
               sx={{
-                display: "flex",
-                gap: { xs: 2, md: 4 },
-                alignItems: "center",
-                py: 1.5,
-                overflowX: "auto",
-                whiteSpace: "nowrap",
+                borderRadius: 2,
+                border: "1px solid",
+                borderColor: "divider",
+                bgcolor: "background.default",
               }}
             >
-              <Typography variant="body2" sx={{ cursor: "pointer", opacity: 0.8, "&:hover": { opacity: 1 } }}>
-                Curso
-              </Typography>
-              <Typography variant="body2" sx={{ cursor: "pointer", opacity: 0.8, "&:hover": { opacity: 1 } }}>
-                Participantes
-              </Typography>
-              <Typography variant="body2" sx={{ cursor: "pointer", opacity: 0.8, "&:hover": { opacity: 1 } }}>
-                Calificaciones
-              </Typography>
-              {user?.role === "teacher" ? (
-                <Typography
-                  variant="body2"
-                  sx={{ cursor: "pointer", fontWeight: 700, borderBottom: "2px solid #fff", pb: 0.5 }}
-                >
-                  REPORTES
-                </Typography>
-              ) : null}
-              <Typography variant="body2" sx={{ cursor: "pointer", opacity: 0.8, "&:hover": { opacity: 1 } }}>
-                Banco de contenido
-              </Typography>
-              <Box
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 1,
-                  cursor: "pointer",
-                  opacity: 0.8,
-                  "&:hover": { opacity: 1 },
-                }}
+              <MenuIcon />
+            </IconButton>
+
+            <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+              <Typography
+                variant="overline"
+                sx={{ display: "block", color: "primary.main", fontWeight: 800, letterSpacing: "0.12em" }}
               >
-                <ChatBubbleOutlineIcon fontSize="small" />
-                <Typography variant="body2">Chatbot</Typography>
-              </Box>
+                {pageHeading.eyebrow}
+              </Typography>
+              <Typography variant="h5" sx={{ color: "text.primary", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {pageHeading.title}
+              </Typography>
+              <Typography variant="body2" sx={{ color: "text.secondary", display: { xs: "none", sm: "block" } }}>
+                {pageHeading.subtitle}
+              </Typography>
             </Box>
-          </Box>
+
+            <IconButton
+              sx={{
+                borderRadius: 2,
+                border: "1px solid",
+                borderColor: "divider",
+                color: "text.secondary",
+                bgcolor: "background.default",
+              }}
+            >
+              <NotificationsNoneOutlinedIcon />
+            </IconButton>
+
+            <Avatar
+              sx={{
+                width: 40,
+                height: 40,
+                bgcolor: "primary.light",
+                color: "primary.main",
+                fontSize: "0.875rem",
+                fontWeight: 800,
+              }}
+            >
+              {(user?.display_name ?? "US").slice(0, 2).toUpperCase()}
+            </Avatar>
+
+            <Box sx={{ display: { xs: "none", md: "block" }, minWidth: 0 }}>
+              <Typography variant="subtitle2" sx={{ color: "text.primary", whiteSpace: "nowrap" }}>
+                {user?.display_name ?? "Usuario"}
+              </Typography>
+              <Typography variant="caption" sx={{ color: "text.secondary", textTransform: "capitalize" }}>
+                {user?.role === "teacher" ? "Profesor" : "Estudiante"}
+              </Typography>
+            </Box>
+
+            <Button variant="outlined" color="primary" onClick={() => void handleLogout()}>
+              Salir
+            </Button>
+          </Toolbar>
         </AppBar>
 
         <Box
           component="main"
           sx={{
             flexGrow: 1,
-            height: "100%",
+            minHeight: 0,
             overflow: "hidden",
             display: "flex",
             flexDirection: "column",

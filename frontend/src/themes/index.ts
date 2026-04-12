@@ -1,1 +1,2 @@
-export { appTheme } from "./appTheme";
+export { createAppTheme, scholarPalette } from "./appTheme";
+export type { AppThemeMode } from "./appTheme";

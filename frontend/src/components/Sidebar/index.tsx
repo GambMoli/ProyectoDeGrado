@@ -3,169 +3,235 @@ import AddIcon from "@mui/icons-material/Add";
 import CalculateOutlinedIcon from "@mui/icons-material/CalculateOutlined";
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import HistoryIcon from "@mui/icons-material/History";
-import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
+import KeyboardDoubleArrowLeftRoundedIcon from "@mui/icons-material/KeyboardDoubleArrowLeftRounded";
+import KeyboardDoubleArrowRightRoundedIcon from "@mui/icons-material/KeyboardDoubleArrowRightRounded";
+import InsightsOutlinedIcon from "@mui/icons-material/InsightsOutlined";
 import {
   Box,
   Button,
+  Divider,
+  IconButton,
   List,
   ListItem,
   ListItemButton,
   ListItemIcon,
   ListItemText,
+  Tooltip,
   Typography,
 } from "@mui/material";
+import type { SxProps, Theme } from "@mui/material/styles";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../../context";
 import { BrandIcon } from "../Icons";
 
 interface SidebarProps {
+  collapsed?: boolean;
   onOpenHistory?: () => void;
   onOpenAttach?: () => void;
   onNavigateReports?: () => void;
+  onToggleCollapsed?: () => void;
 }
 
-export function Sidebar({ onOpenHistory, onOpenAttach, onNavigateReports }: SidebarProps) {
+interface NavItemConfig {
+  key: string;
+  label: string;
+  icon: React.ReactNode;
+  selected: boolean;
+  onClick: () => void;
+}
+
+export function Sidebar({
+  collapsed = false,
+  onOpenHistory,
+  onOpenAttach,
+  onNavigateReports,
+  onToggleCollapsed,
+}: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
 
-  const handleNavigate = (path: string) => {
-    navigate(path);
+  const navItems: NavItemConfig[] = [
+    {
+      key: "chat",
+      label: "Chat",
+      icon: <ChatBubbleOutlineIcon fontSize="small" />,
+      selected: location.pathname === "/",
+      onClick: () => navigate("/"),
+    },
+    {
+      key: "history",
+      label: "Historial",
+      icon: <HistoryIcon fontSize="small" />,
+      selected: false,
+      onClick: () => onOpenHistory?.(),
+    },
+    {
+      key: "attach",
+      label: "Ejercicios",
+      icon: <CalculateOutlinedIcon fontSize="small" />,
+      selected: false,
+      onClick: () => onOpenAttach?.(),
+    },
+  ];
+
+  if (user?.role === "teacher") {
+    navItems.push({
+      key: "reports",
+      label: "Reportes",
+      icon: <InsightsOutlinedIcon fontSize="small" />,
+      selected: location.pathname === "/reports",
+      onClick: () => {
+        onNavigateReports?.();
+        navigate("/reports");
+      },
+    });
+  }
+
+  const itemBaseSx: SxProps<Theme> = {
+    minHeight: 44,
+    borderRadius: 2,
+    px: collapsed ? 1.25 : 1.5,
+    justifyContent: collapsed ? "center" : "flex-start",
+    gap: collapsed ? 0 : 1.25,
+    color: "text.secondary",
+    "&:hover": {
+      bgcolor: "background.default",
+    },
   };
 
-  return (
-    <Box sx={{ display: "flex", flexDirection: "column", height: "100%", bgcolor: "#fff" }}>
-      <Box sx={{ p: 3, pt: 4, display: "flex", alignItems: "center", gap: 1.5 }}>
-        <Box
+  function renderNavItem(item: NavItemConfig) {
+    const button = (
+      <ListItemButton
+        selected={item.selected}
+        onClick={item.onClick}
+        sx={{
+          ...itemBaseSx,
+          bgcolor: item.selected ? "primary.light" : "transparent",
+          color: item.selected ? "primary.main" : "text.secondary",
+          "&.Mui-selected": {
+            bgcolor: "primary.light",
+            color: "primary.main",
+            "&:hover": {
+              bgcolor: "primary.light",
+            },
+          },
+        }}
+      >
+        <ListItemIcon
           sx={{
-            width: 40,
-            height: 40,
-            borderRadius: 2,
-            bgcolor: "#EFF6FF",
-            display: "grid",
-            placeItems: "center",
-            color: "#1E3A8A",
+            minWidth: 0,
+            color: "inherit",
+            justifyContent: "center",
           }}
         >
-          <BrandIcon style={{ width: 20, height: 20 }} />
-        </Box>
-        <Box>
-          <Typography variant="h6" sx={{ color: "#1E3A8A", fontWeight: 800, fontSize: "1.1rem", lineHeight: 1.2 }}>
-            Cubik IA
-          </Typography>
-          <Typography variant="caption" sx={{ color: "#6B7280", fontWeight: 700, fontSize: "0.75rem" }}>
-            Academic Curator
-          </Typography>
-        </Box>
-      </Box>
+          {item.icon}
+        </ListItemIcon>
+        {!collapsed ? (
+          <ListItemText
+            primary={item.label}
+            primaryTypographyProps={{
+              fontSize: "0.95rem",
+              fontWeight: item.selected ? 700 : 600,
+            }}
+          />
+        ) : null}
+      </ListItemButton>
+    );
 
-      <List sx={{ px: 2, flexGrow: 1 }}>
-        <ListItem disablePadding sx={{ mb: 0.5 }}>
-          <ListItemButton
-            selected={location.pathname === "/"}
-            onClick={() => handleNavigate("/")}
+    if (collapsed) {
+      return (
+        <Tooltip key={item.key} title={item.label} placement="right">
+          {button}
+        </Tooltip>
+      );
+    }
+
+    return <React.Fragment key={item.key}>{button}</React.Fragment>;
+  }
+
+  return (
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100%", bgcolor: "background.paper" }}>
+      <Box
+        sx={{
+          px: collapsed ? 1.5 : 2.5,
+          py: 2.5,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: collapsed ? "center" : "space-between",
+          gap: 1.5,
+        }}
+      >
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, minWidth: 0 }}>
+          <Box
             sx={{
-              borderRadius: "8px",
-              bgcolor: location.pathname === "/" ? "#EFF6FF" : "transparent",
-              color: location.pathname === "/" ? "#1E3A8A" : "#4B5563",
-              py: 1.2,
-              px: 2,
-              "&.Mui-selected": {
-                bgcolor: "#EFF6FF",
-                color: "#1E3A8A",
-                "&:hover": { bgcolor: "#E0EFFF" },
-              },
-              "&:hover": { bgcolor: "#F3F4F6" },
+              width: 40,
+              height: 40,
+              borderRadius: 2,
+              bgcolor: "primary.light",
+              display: "grid",
+              placeItems: "center",
+              color: "primary.main",
+              flexShrink: 0,
             }}
           >
-            <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
-              <ChatBubbleOutlineIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText
-              primary="Chat"
-              primaryTypographyProps={{ fontSize: "0.875rem", fontWeight: location.pathname === "/" ? 700 : 600 }}
-            />
-          </ListItemButton>
-        </ListItem>
+            <BrandIcon style={{ width: 20, height: 20 }} />
+          </Box>
+          {!collapsed ? (
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="subtitle1" sx={{ color: "text.primary", whiteSpace: "nowrap" }}>
+                Scholar Pro
+              </Typography>
+              <Typography variant="caption" sx={{ color: "text.secondary", letterSpacing: "0.04em" }}>
+                Cubik IA
+              </Typography>
+            </Box>
+          ) : null}
+        </Box>
 
-        <ListItem disablePadding sx={{ mb: 0.5 }}>
-          <ListItemButton
-            onClick={onOpenHistory}
-            sx={{ borderRadius: "8px", color: "#4B5563", py: 1.2, px: 2, "&:hover": { bgcolor: "#F3F4F6" } }}
+        {onToggleCollapsed ? (
+          <IconButton
+            onClick={onToggleCollapsed}
+            size="small"
+            sx={{
+              borderRadius: 2,
+              border: "1px solid",
+              borderColor: "divider",
+              display: { xs: "none", md: "inline-flex" },
+            }}
           >
-            <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
-              <HistoryIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText primary="History" primaryTypographyProps={{ fontSize: "0.875rem", fontWeight: 600 }} />
-          </ListItemButton>
-        </ListItem>
-
-        <ListItem disablePadding sx={{ mb: 0.5 }}>
-          <ListItemButton
-            onClick={onOpenAttach}
-            sx={{ borderRadius: "8px", color: "#4B5563", py: 1.2, px: 2, "&:hover": { bgcolor: "#F3F4F6" } }}
-          >
-            <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
-              <CalculateOutlinedIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText primary="Exercises" primaryTypographyProps={{ fontSize: "0.875rem", fontWeight: 600 }} />
-          </ListItemButton>
-        </ListItem>
-
-        {user?.role === "teacher" ? (
-          <ListItem disablePadding sx={{ mb: 0.5 }}>
-            <ListItemButton
-              selected={location.pathname === "/reports"}
-              onClick={() => {
-                onNavigateReports?.();
-                handleNavigate("/reports");
-              }}
-              sx={{
-                borderRadius: "8px",
-                bgcolor: location.pathname === "/reports" ? "#EFF6FF" : "transparent",
-                color: location.pathname === "/reports" ? "#1E3A8A" : "#4B5563",
-                py: 1.2,
-                px: 2,
-                "&.Mui-selected": {
-                  bgcolor: "#EFF6FF",
-                  color: "#1E3A8A",
-                  "&:hover": { bgcolor: "#E0EFFF" },
-                },
-                "&:hover": { bgcolor: "#F3F4F6" },
-              }}
-            >
-              <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
-                <SettingsOutlinedIcon fontSize="small" />
-              </ListItemIcon>
-              <ListItemText
-                primary="Reportes"
-                primaryTypographyProps={{ fontSize: "0.875rem", fontWeight: location.pathname === "/reports" ? 700 : 600 }}
-              />
-            </ListItemButton>
-          </ListItem>
+            {collapsed ? (
+              <KeyboardDoubleArrowRightRoundedIcon fontSize="small" />
+            ) : (
+              <KeyboardDoubleArrowLeftRoundedIcon fontSize="small" />
+            )}
+          </IconButton>
         ) : null}
+      </Box>
+
+      <Divider />
+
+      <List sx={{ px: collapsed ? 1 : 1.5, py: 2, display: "grid", gap: 0.75, flexGrow: 1 }}>
+        {navItems.map((item) => (
+          <ListItem key={item.key} disablePadding>
+            {renderNavItem(item)}
+          </ListItem>
+        ))}
       </List>
 
-      <Box sx={{ p: 2, pb: 4 }}>
-        <Button
-          variant="contained"
-          fullWidth
-          onClick={onOpenAttach}
-          startIcon={<AddIcon />}
-          sx={{
-            bgcolor: "#1E3A8A",
-            color: "#fff",
-            borderRadius: "10px",
-            textTransform: "none",
-            fontWeight: 700,
-            py: 1.2,
-            boxShadow: "0 10px 20px rgba(30, 58, 138, 0.15)",
-            "&:hover": { bgcolor: "#1E40AF", boxShadow: "0 10px 20px rgba(30, 58, 138, 0.25)" },
-          }}
-        >
-          New Exercise
-        </Button>
+      <Box sx={{ px: collapsed ? 1 : 2, pb: 2.5 }}>
+        {collapsed ? (
+          <Tooltip title="Nuevo ejercicio" placement="right">
+            <Button variant="contained" fullWidth onClick={onOpenAttach} sx={{ minWidth: 0, px: 0 }}>
+              <AddIcon />
+            </Button>
+          </Tooltip>
+        ) : (
+          <Button variant="contained" fullWidth onClick={onOpenAttach} startIcon={<AddIcon />}>
+            Nuevo ejercicio
+          </Button>
+        )}
       </Box>
     </Box>
   );

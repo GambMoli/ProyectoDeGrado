@@ -8,7 +8,7 @@ import { Box, Button, CircularProgress, Grid, Stack, Typography } from "@mui/mat
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import type { TopicReportSummary } from "../../../types/api";
-import { accentBlue, textPrimary, textSecondary } from "../constants";
+import { accentBlue, accentBlueSoft, cardBorder, surfaceSecondary, textPrimary, textSecondary } from "../constants";
 import { formatChange, formatPercentage, formatWholeNumber, interactionLevelLabel } from "../utils";
 import { SectionCard } from "./SectionCard";
 import { TopicMetricCard } from "./TopicMetricCard";
@@ -48,8 +48,8 @@ export function TopicReportsSection({
 
       <Grid container spacing={3}>
         <Grid item xs={12} lg={3}>
-          <SectionCard sx={{ p: 2.25, height: "100%" }}>
-            <Typography sx={{ fontSize: 14, fontWeight: 700, color: "#1E293B", mb: 2 }}>
+          <SectionCard sx={{ p: 3, height: "100%" }}>
+            <Typography sx={{ fontSize: 14, fontWeight: 700, color: textPrimary, mb: 2 }}>
               TEMAS DEL CURSO
             </Typography>
 
@@ -72,9 +72,9 @@ export function TopicReportsSection({
                         gap: 1.25,
                         px: 1.9,
                         py: 1.55,
-                        borderRadius: "12px",
-                        border: isSelected ? `1.5px solid ${accentBlue}` : "1px solid #DCE5F3",
-                        bgcolor: isSelected ? "#F5F9FF" : "#FFFFFF",
+                        borderRadius: 2,
+                        border: isSelected ? `1.5px solid ${accentBlue}` : `1px solid ${cardBorder}`,
+                        bgcolor: isSelected ? accentBlueSoft : "#FFFFFF",
                         cursor: "pointer",
                       }}
                     >
@@ -89,7 +89,7 @@ export function TopicReportsSection({
                         }}
                       />
                       <Typography
-                        sx={{ fontSize: 15, fontWeight: isSelected ? 700 : 500, color: "#1E293B" }}
+                        sx={{ fontSize: 15, fontWeight: isSelected ? 700 : 500, color: textPrimary }}
                       >
                         {topic.label}
                       </Typography>
@@ -107,7 +107,6 @@ export function TopicReportsSection({
               sx={{
                 mt: 3,
                 py: 1.45,
-                borderRadius: "12px",
                 textTransform: "none",
                 fontWeight: 700,
                 bgcolor: accentBlue,
@@ -120,7 +119,7 @@ export function TopicReportsSection({
         </Grid>
 
         <Grid item xs={12} lg={9}>
-          <SectionCard sx={{ p: 3 }}>
+          <SectionCard sx={{ p: 4 }}>
             <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", mb: 3 }}>
               <Typography sx={{ fontSize: 18, fontWeight: 800, color: textPrimary }}>
                 Metricas de Tema: {selectedTopicSummary?.label || "Tema"}
@@ -130,11 +129,10 @@ export function TopicReportsSection({
                 variant="outlined"
                 startIcon={<DownloadOutlinedIcon />}
                 sx={{
-                  borderRadius: "12px",
                   textTransform: "none",
                   fontWeight: 700,
-                  color: "#334155",
-                  borderColor: "#D5DEEB",
+                  color: textSecondary,
+                  borderColor: cardBorder,
                 }}
               >
                 Exportar
@@ -198,13 +196,14 @@ export function TopicReportsSection({
 
             <Box
               sx={{
-                borderRadius: "18px",
-                border: "1px solid #E6EDF6",
+                borderRadius: 2,
+                border: `1px solid ${cardBorder}`,
                 minHeight: 240,
                 p: 3,
+                bgcolor: surfaceSecondary,
               }}
             >
-              <Typography sx={{ fontSize: 15, fontWeight: 500, color: "#1E293B", mb: 2.5 }}>
+              <Typography sx={{ fontSize: 15, fontWeight: 700, color: textPrimary, mb: 2.5 }}>
                 Evolucion de Consultas (Ultimos 7 dias)
               </Typography>
 
@@ -216,7 +215,7 @@ export function TopicReportsSection({
                 <Box sx={{ height: 190 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={topicTrendData} margin={{ top: 8, right: 4, left: -20, bottom: 0 }}>
-                      <CartesianGrid vertical={false} stroke="#EEF2F7" />
+                      <CartesianGrid vertical={false} stroke={accentBlueSoft} />
                       <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#94A3B8", fontSize: 12 }} />
                       <YAxis hide allowDecimals={false} />
                       <Tooltip />

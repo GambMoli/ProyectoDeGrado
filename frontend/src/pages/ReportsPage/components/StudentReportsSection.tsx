@@ -18,7 +18,7 @@ import {
 } from "recharts";
 
 import type { StudentReportListItem, StudentReportSummary } from "../../../types/api";
-import { accentBlue, avatarPalette, tableDivider, textPrimary, textSecondary } from "../constants";
+import { accentBlue, accentBlueSoft, avatarPalette, surfaceSecondary, tableDivider, textPrimary, textSecondary } from "../constants";
 import { formatDateRange, formatOneDecimal, formatWholeNumber, initialsForName } from "../utils";
 import { SectionCard } from "./SectionCard";
 import { StudentMetricCard } from "./StudentMetricCard";
@@ -87,11 +87,11 @@ export function StudentReportsSection({
         </Alert>
       ) : null}
 
-      <Grid container spacing={3} sx={{ mb: 3 }}>
+      <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} lg={8}>
           <SectionCard sx={{ overflow: "hidden" }}>
-            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", px: 3, py: 2.25 }}>
-              <Typography sx={{ fontSize: 15, fontWeight: 600, color: "#1E293B" }}>
+            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", px: 4, py: 3, gap: 2, flexWrap: "wrap" }}>
+              <Typography sx={{ fontSize: 16, fontWeight: 700, color: textPrimary }}>
                 Seleccionar Estudiante
               </Typography>
               <TextField
@@ -106,7 +106,7 @@ export function StudentReportsSection({
                       <SearchIcon sx={{ fontSize: 18, color: "#94A3B8" }} />
                     </InputAdornment>
                   ),
-                  sx: { borderRadius: "12px", bgcolor: "#FFFFFF" },
+                  sx: { bgcolor: "#FFFFFF" },
                 }}
               />
             </Box>
@@ -119,7 +119,7 @@ export function StudentReportsSection({
                 py: 1.5,
                 borderTop: `1px solid ${tableDivider}`,
                 borderBottom: `1px solid ${tableDivider}`,
-                bgcolor: "#FCFDFE",
+                bgcolor: surfaceSecondary,
                 color: textSecondary,
               }}
             >
@@ -151,7 +151,7 @@ export function StudentReportsSection({
                       key={student.user_id}
                       disableGutters
                       sx={{
-                        px: 3,
+                        px: 4,
                         py: 1.75,
                         display: "grid",
                         gridTemplateColumns: "1.2fr 0.9fr 120px",
@@ -194,19 +194,19 @@ export function StudentReportsSection({
         </Grid>
 
         <Grid item xs={12} lg={4}>
-          <SectionCard sx={{ p: 3, height: "100%" }}>
+          <SectionCard sx={{ p: 4, height: "100%" }}>
             <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 3 }}>
-              <FilterAltOutlinedIcon sx={{ color: "#64748B", fontSize: 20 }} />
-              <Typography sx={{ fontSize: 16, fontWeight: 700, color: "#1E293B" }}>
+              <FilterAltOutlinedIcon sx={{ color: textSecondary, fontSize: 20 }} />
+              <Typography sx={{ fontSize: 16, fontWeight: 700, color: textPrimary }}>
                 Filtros de Periodo
               </Typography>
             </Stack>
 
             <Stack spacing={2.25}>
               <Box>
-                <Typography sx={{ fontSize: 14, fontWeight: 500, color: "#52627A", mb: 1 }}>
-                  Fecha de Inicio
-                </Typography>
+                  <Typography sx={{ fontSize: 14, fontWeight: 600, color: textSecondary, mb: 1 }}>
+                    Fecha de Inicio
+                  </Typography>
                 <TextField
                   fullWidth
                   size="small"
@@ -219,15 +219,15 @@ export function StudentReportsSection({
                         <CalendarTodayOutlinedIcon sx={{ fontSize: 18, color: "#94A3B8" }} />
                       </InputAdornment>
                     ),
-                    sx: { borderRadius: "12px" },
+                    sx: { bgcolor: "#FFFFFF" },
                   }}
                 />
               </Box>
 
               <Box>
-                <Typography sx={{ fontSize: 14, fontWeight: 500, color: "#52627A", mb: 1 }}>
-                  Fecha de Fin
-                </Typography>
+                  <Typography sx={{ fontSize: 14, fontWeight: 600, color: textSecondary, mb: 1 }}>
+                    Fecha de Fin
+                  </Typography>
                 <TextField
                   fullWidth
                   size="small"
@@ -240,7 +240,7 @@ export function StudentReportsSection({
                         <CalendarTodayOutlinedIcon sx={{ fontSize: 18, color: "#94A3B8" }} />
                       </InputAdornment>
                     ),
-                    sx: { borderRadius: "12px" },
+                    sx: { bgcolor: "#FFFFFF" },
                   }}
                 />
               </Box>
@@ -253,7 +253,6 @@ export function StudentReportsSection({
               sx={{
                 mt: 4,
                 py: 1.5,
-                borderRadius: "12px",
                 textTransform: "none",
                 fontWeight: 700,
                 bgcolor: accentBlue,
@@ -267,7 +266,7 @@ export function StudentReportsSection({
         </Grid>
       </Grid>
 
-      <SectionCard sx={{ p: 3, mb: 5 }}>
+      <SectionCard sx={{ p: 4, mb: 5 }}>
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", mb: 3 }}>
           <Box>
             <Typography sx={{ fontSize: 18, fontWeight: 800, color: textPrimary }}>
@@ -282,11 +281,10 @@ export function StudentReportsSection({
             variant="outlined"
             startIcon={<DownloadOutlinedIcon />}
             sx={{
-              borderRadius: "12px",
               textTransform: "none",
               fontWeight: 700,
-              color: "#334155",
-              borderColor: "#D5DEEB",
+              color: textSecondary,
+              borderColor: tableDivider,
             }}
           >
             Generar reporte
@@ -347,13 +345,14 @@ export function StudentReportsSection({
 
             <Box
               sx={{
-                borderRadius: "18px",
-                border: "1px solid #E6EDF6",
+                borderRadius: 2,
+                border: `1px solid ${tableDivider}`,
                 minHeight: 280,
                 p: 3,
+                bgcolor: "#FFFFFF",
               }}
             >
-              <Typography sx={{ fontSize: 15, fontWeight: 500, color: "#1E293B", mb: 2.5 }}>
+              <Typography sx={{ fontSize: 15, fontWeight: 700, color: textPrimary, mb: 2.5 }}>
                 Actividad por Semana
               </Typography>
 
@@ -373,11 +372,11 @@ export function StudentReportsSection({
                     <AreaChart data={weeklyChartData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                       <defs>
                         <linearGradient id="studentActivityFill" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={accentBlue} stopOpacity={0.16} />
+                          <stop offset="5%" stopColor={accentBlue} stopOpacity={0.2} />
                           <stop offset="95%" stopColor={accentBlue} stopOpacity={0.02} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid vertical={false} stroke="#EEF2F7" strokeDasharray="3 3" />
+                      <CartesianGrid vertical={false} stroke={accentBlueSoft} strokeDasharray="3 3" />
                       <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#94A3B8", fontSize: 12 }} />
                       <YAxis hide allowDecimals={false} />
                       <Tooltip />

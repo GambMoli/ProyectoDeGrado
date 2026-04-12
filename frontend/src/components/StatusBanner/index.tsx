@@ -1,4 +1,4 @@
-import { Alert, Box } from "@mui/material";
+import { Alert } from "@mui/material";
 
 interface StatusBannerProps {
   tone?: "info" | "error";
@@ -7,21 +7,18 @@ interface StatusBannerProps {
 
 export function StatusBanner({ tone = "info", message }: StatusBannerProps) {
   return (
-    <Box sx={{ p: 1 }}>
-      <Alert
-        severity={tone}
-        variant="outlined"
-        sx={{
-          borderRadius: 3,
-          bgcolor: tone === "error" ? "#FFF2F2" : "inherit",
-          borderColor: tone === "error" ? "#F3D4D4" : "inherit",
-          color: tone === "error" ? "#C84444" : "inherit",
-          fontWeight: 600,
-          "& .MuiAlert-icon": { color: "inherit" },
-        }}
-      >
-        {message}
-      </Alert>
-    </Box>
+    <Alert
+      severity={tone}
+      variant="outlined"
+      sx={{
+        fontWeight: 600,
+        bgcolor: tone === "error" ? "rgba(211, 47, 47, 0.06)" : "background.paper",
+        borderColor: tone === "error" ? "rgba(211, 47, 47, 0.24)" : "divider",
+        color: tone === "error" ? "error.main" : "text.primary",
+        "& .MuiAlert-icon": { color: "inherit" },
+      }}
+    >
+      {message}
+    </Alert>
   );
 }

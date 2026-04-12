@@ -50,9 +50,9 @@ export function AttachExerciseModal({
       fullWidth
       PaperProps={{
         sx: {
-          borderRadius: 4,
+          borderRadius: 2.5,
           p: 1,
-          boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)",
+          boxShadow: "none",
         },
       }}
     >
@@ -66,38 +66,44 @@ export function AttachExerciseModal({
           alignItems: "center",
         }}
       >
-        <Typography variant="h6" sx={{ color: "#1E3A8A", fontWeight: 800, fontSize: "1.1rem" }}>
-          Adjuntar ejercicio
-        </Typography>
-        <IconButton aria-label="close" onClick={onClose} sx={{ color: "#9CA3AF" }}>
+        <Box>
+          <Typography variant="overline" sx={{ color: "primary.main", fontWeight: 800, letterSpacing: "0.12em" }}>
+            Cubik IA
+          </Typography>
+          <Typography variant="h6" sx={{ color: "text.primary" }}>
+            Adjuntar ejercicio
+          </Typography>
+        </Box>
+        <IconButton aria-label="close" onClick={onClose} sx={{ color: "text.secondary" }}>
           <CloseIcon />
         </IconButton>
       </DialogTitle>
 
       <DialogContent sx={{ p: 2 }}>
-        <Box sx={{ display: "flex", gap: 2, mb: 3 }}>
+        <Box sx={{ display: "flex", gap: 2, mb: 3, flexDirection: { xs: "column", sm: "row" } }}>
           <Box
             component="button"
             onClick={() => uploadInputRef.current?.click()}
             sx={{
               flex: 1,
-              border: "2px dashed #E5E7EB",
-              borderRadius: 4,
+              border: "1px dashed",
+              borderColor: "divider",
+              borderRadius: 2,
               p: 3,
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
-              bgcolor: "transparent",
+              bgcolor: "background.default",
               cursor: "pointer",
-              transition: "all 0.2s",
-              "&:hover": { borderColor: "#1E3A8A", bgcolor: "#EFF6FF" },
+              transition: "all 0.2s ease",
+              "&:hover": { borderColor: "primary.main", bgcolor: "primary.light" },
             }}
           >
             <Box
               sx={{
-                bgcolor: "#1E3A8A",
+                bgcolor: "primary.main",
                 color: "white",
-                borderRadius: "50%",
+                borderRadius: 2,
                 p: 1.5,
                 mb: 2,
                 display: "flex",
@@ -105,11 +111,11 @@ export function AttachExerciseModal({
             >
               <CloudUploadOutlinedIcon />
             </Box>
-            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: "#1F2937", mb: 0.5 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: "text.primary", mb: 0.5 }}>
               Subir archivo
             </Typography>
-            <Typography variant="caption" sx={{ color: "#6B7280", fontWeight: 600 }}>
-              Archivos locales
+            <Typography variant="caption" sx={{ color: "text.secondary", fontWeight: 600 }}>
+              Imagen desde el equipo
             </Typography>
           </Box>
 
@@ -118,23 +124,24 @@ export function AttachExerciseModal({
             onClick={() => cameraInputRef.current?.click()}
             sx={{
               flex: 1,
-              border: "2px dashed #E5E7EB",
-              borderRadius: 4,
+              border: "1px dashed",
+              borderColor: "divider",
+              borderRadius: 2,
               p: 3,
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
-              bgcolor: "transparent",
+              bgcolor: "background.default",
               cursor: "pointer",
-              transition: "all 0.2s",
-              "&:hover": { borderColor: "#1E3A8A", bgcolor: "#EFF6FF" },
+              transition: "all 0.2s ease",
+              "&:hover": { borderColor: "primary.main", bgcolor: "primary.light" },
             }}
           >
             <Box
               sx={{
-                bgcolor: "#1E3A8A",
+                bgcolor: "primary.main",
                 color: "white",
-                borderRadius: "50%",
+                borderRadius: 2,
                 p: 1.5,
                 mb: 2,
                 display: "flex",
@@ -142,51 +149,38 @@ export function AttachExerciseModal({
             >
               <CameraAltOutlinedIcon />
             </Box>
-            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: "#1F2937", mb: 0.5 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: "text.primary", mb: 0.5 }}>
               Usar camara
             </Typography>
-            <Typography variant="caption" sx={{ color: "#6B7280", fontWeight: 600 }}>
+            <Typography variant="caption" sx={{ color: "text.secondary", fontWeight: 600 }}>
               Captura directa
             </Typography>
           </Box>
         </Box>
 
         <Paper
-          elevation={0}
           sx={{
-            bgcolor: "#F9FAFB",
-            borderRadius: 3,
+            bgcolor: "background.default",
             p: 2,
             display: "flex",
             gap: 1.5,
             alignItems: "center",
           }}
         >
-          <InfoOutlinedIcon sx={{ color: "#1E3A8A" }} />
+          <InfoOutlinedIcon sx={{ color: "primary.main" }} />
           <Box>
-            <Typography
-              variant="caption"
-              sx={{ fontWeight: 700, color: "#4B5563", display: "block" }}
-            >
-              Formatos permitidos:
+            <Typography variant="caption" sx={{ fontWeight: 700, color: "text.secondary", display: "block" }}>
+              Formatos permitidos
             </Typography>
-            <Typography variant="caption" sx={{ fontWeight: 800, color: "#1E3A8A" }}>
-              {selectedFile ? selectedFile.name : "PNG Y JPEG"}
+            <Typography variant="caption" sx={{ fontWeight: 800, color: "primary.main" }}>
+              {selectedFile ? selectedFile.name : "PNG y JPEG"}
             </Typography>
           </Box>
         </Paper>
       </DialogContent>
 
       <DialogActions sx={{ p: 2, pt: 1 }}>
-        <Button
-          onClick={onClose}
-          sx={{
-            color: "#4B5563",
-            fontWeight: 700,
-            textTransform: "none",
-            "&:hover": { bgcolor: "#F3F4F6" },
-          }}
-        >
+        <Button onClick={onClose} variant="text" color="inherit">
           Cancelar
         </Button>
       </DialogActions>

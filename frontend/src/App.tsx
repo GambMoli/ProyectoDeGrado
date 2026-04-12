@@ -15,19 +15,18 @@ export default function App() {
         <Route
           path="/"
           element={
-            <ProtectedRoute>
+            
               <ChatPage />
-            </ProtectedRoute>
+            
           }
         />
         <Route
           path="/reports"
           element={
-            <ProtectedRoute allowedRoles={["teacher"]}>
+            
               <MainLayout>
                 <ReportsPage />
               </MainLayout>
-            </ProtectedRoute>
           }
         />
       </Routes>

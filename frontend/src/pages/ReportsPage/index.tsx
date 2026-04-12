@@ -1,6 +1,6 @@
 import { Box, Typography } from "@mui/material";
 
-import { pageBackground, textPrimary } from "./constants";
+import { pageBackground, textPrimary, textSecondary } from "./constants";
 import { StudentReportsSection } from "./components/StudentReportsSection";
 import { TopicReportsSection } from "./components/TopicReportsSection";
 import { useReportsDashboard } from "./hooks/useReportsDashboard";
@@ -36,13 +36,21 @@ export function ReportsPage() {
 
   return (
     <Box sx={{ flexGrow: 1, bgcolor: pageBackground, minHeight: "100%" }}>
-      <Box sx={{ maxWidth: 1280, mx: "auto", px: { xs: 2, md: 3 }, py: 4 }}>
-        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 4 }}>
-          <Typography sx={{ fontSize: 26, fontWeight: 800, color: textPrimary }}>
-            Reportes
-          </Typography>
-          <Typography sx={{ fontSize: 14, fontWeight: 500, color: "#94A3B8" }}>
-            Pagina Principal / Mis cursos / Reportes
+      <Box sx={{ maxWidth: 1320, mx: "auto", px: { xs: 2, md: 4 }, py: { xs: 3, md: 4 } }}>
+        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", mb: 5, gap: 2, flexWrap: "wrap" }}>
+          <Box>
+            <Typography variant="overline" sx={{ color: "primary.main", fontWeight: 800, letterSpacing: "0.12em" }}>
+              Scholar Pro
+            </Typography>
+            <Typography variant="h4" sx={{ color: textPrimary }}>
+              Reportes Academicos
+            </Typography>
+            <Typography variant="body2" sx={{ color: textSecondary, mt: 0.75 }}>
+              Visualiza actividad estudiantil y tendencias por tema en una reticula editorial de lectura rapida.
+            </Typography>
+          </Box>
+          <Typography sx={{ fontSize: 13, fontWeight: 700, color: textSecondary, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+            Analitica institucional
           </Typography>
         </Box>
 
@@ -67,15 +75,17 @@ export function ReportsPage() {
           onSelectStudent={setSelectedStudentId}
         />
 
-        <TopicReportsSection
-          isTopicTrendLoading={isTopicTrendLoading}
-          isTopicsLoading={isTopicsLoading}
-          selectedTopic={selectedTopic}
-          selectedTopicSummary={selectedTopicSummary}
-          topicSummaries={topicSummaries}
-          topicTrendData={topicTrendData}
-          onSelectTopic={setSelectedTopic}
-        />
+        <Box sx={{ mt: { xs: 5, md: 7 } }}>
+          <TopicReportsSection
+            isTopicTrendLoading={isTopicTrendLoading}
+            isTopicsLoading={isTopicsLoading}
+            selectedTopic={selectedTopic}
+            selectedTopicSummary={selectedTopicSummary}
+            topicSummaries={topicSummaries}
+            topicTrendData={topicTrendData}
+            onSelectTopic={setSelectedTopic}
+          />
+        </Box>
       </Box>
     </Box>
   );

@@ -44,41 +44,22 @@ export function HistoryDrawer({
         sx: {
           width: 320,
           boxSizing: "border-box",
-          bgcolor: "#fff",
-          borderRight: "1px solid #E5E7EB",
+          bgcolor: "background.paper",
         },
       }}
     >
       <Box sx={{ display: "flex", flexDirection: "column", height: "100%", p: 3 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 3 }}>
-          <Button
-            variant="contained"
-            fullWidth
-            onClick={onNewConversation}
-            startIcon={<AddIcon />}
-            sx={{
-              bgcolor: "#1E3A8A",
-              color: "#fff",
-              borderRadius: "10px",
-              textTransform: "none",
-              fontWeight: 700,
-              py: 1,
-              boxShadow: "none",
-              "&:hover": {
-                bgcolor: "#1E40AF",
-                boxShadow: "0 4px 12px rgba(30,58,138,0.2)",
-              },
-            }}
-          >
+          <Button variant="contained" fullWidth onClick={onNewConversation} startIcon={<AddIcon />}>
             Nuevo chat
           </Button>
           <IconButton
             onClick={onClose}
             sx={{
-              bgcolor: "#F3F4F6",
-              color: "#6B7280",
-              borderRadius: "10px",
-              "&:hover": { bgcolor: "#E5E7EB" },
+              borderRadius: 2,
+              border: "1px solid",
+              borderColor: "divider",
+              bgcolor: "background.default",
             }}
           >
             <CloseIcon fontSize="small" />
@@ -90,30 +71,27 @@ export function HistoryDrawer({
             variant="overline"
             sx={{
               fontWeight: 800,
-              color: "#9CA3AF",
-              letterSpacing: "0.1em",
+              color: "text.secondary",
+              letterSpacing: "0.12em",
               mb: 2,
               display: "block",
             }}
           >
-            Contenidos recientes
+            Conversaciones recientes
           </Typography>
 
           {isLoading ? (
             <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
-              <CircularProgress size={24} sx={{ color: "#1E3A8A" }} />
+              <CircularProgress size={24} color="primary" />
             </Box>
           ) : conversations.length === 0 ? (
-            <Typography
-              variant="body2"
-              sx={{ color: "#9CA3AF", textAlign: "center", mt: 4, px: 2 }}
-            >
+            <Typography variant="body2" sx={{ color: "text.secondary", textAlign: "center", mt: 4, px: 2 }}>
               Tus conversaciones apareceran aqui despues del primer mensaje.
             </Typography>
           ) : (
-            <List disablePadding>
+            <List disablePadding sx={{ display: "grid", gap: 1 }}>
               {conversations.map((conversation) => (
-                <ListItem key={conversation.id} disablePadding sx={{ mb: 1 }}>
+                <ListItem key={conversation.id} disablePadding>
                   <ListItemButton
                     selected={conversation.id === activeConversationId}
                     onClick={() => {
@@ -121,38 +99,24 @@ export function HistoryDrawer({
                       onClose();
                     }}
                     sx={{
-                      borderRadius: "8px",
-                      py: 1.2,
-                      px: 2,
-                      bgcolor:
-                        conversation.id === activeConversationId ? "#EFF6FF" : "transparent",
-                      color:
-                        conversation.id === activeConversationId ? "#1E3A8A" : "#4B5563",
+                      borderRadius: 2,
+                      py: 1.25,
+                      px: 1.5,
+                      alignItems: "flex-start",
+                      bgcolor: conversation.id === activeConversationId ? "primary.light" : "transparent",
+                      color: conversation.id === activeConversationId ? "primary.main" : "text.secondary",
                       "&.Mui-selected": {
-                        bgcolor: "#EFF6FF",
-                        color: "#1E3A8A",
-                        "&:hover": { bgcolor: "#E0EFFF" },
+                        bgcolor: "primary.light",
+                        color: "primary.main",
+                        "&:hover": { bgcolor: "primary.light" },
                       },
-                      "&:hover": { bgcolor: "#F3F4F6" },
+                      "&:hover": { bgcolor: "background.default" },
                     }}
                   >
-                    <Box
-                      sx={{
-                        mr: 1.5,
-                        width: 10,
-                        height: 10,
-                        borderRadius: "2px",
-                        border: "2px solid",
-                        borderColor:
-                          conversation.id === activeConversationId ? "#1E3A8A" : "#D1D5DB",
-                        bgcolor:
-                          conversation.id === activeConversationId ? "#1E3A8A" : "transparent",
-                      }}
-                    />
                     <ListItemText
                       primary={conversation.title}
                       primaryTypographyProps={{
-                        fontSize: "0.875rem",
+                        fontSize: "0.95rem",
                         fontWeight: conversation.id === activeConversationId ? 700 : 600,
                         noWrap: true,
                       }}
