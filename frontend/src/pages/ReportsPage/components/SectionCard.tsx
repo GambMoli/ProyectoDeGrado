@@ -13,7 +13,7 @@ export function SectionCard({ children, sx }: SectionCardProps) {
       elevation={0}
       sx={{
         borderRadius: 2,
-        bgcolor: "#FFFFFF",
+        bgcolor: "background.paper",
         ...sx,
       }}
     >

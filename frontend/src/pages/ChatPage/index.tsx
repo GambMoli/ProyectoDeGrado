@@ -3,7 +3,6 @@ import { Box, Paper, Typography } from "@mui/material";
 import { StatusBanner } from "../../components";
 import { MainLayout } from "../../layouts/MainLayout";
 import { AttachExerciseModal } from "./components/AttachExerciseModal";
-import { AttachShortcutButton } from "./components/AttachShortcutButton";
 import { ChatMessage } from "./components/ChatMessage";
 import { Composer } from "./components/Composer";
 import { EmptyConversationState } from "./components/EmptyConversationState";
@@ -62,26 +61,6 @@ export function ChatPage() {
         >
           <Box
             sx={{
-              px: { xs: 3, md: 4 },
-              py: 2.5,
-              borderBottom: "1px solid",
-              borderColor: "divider",
-              bgcolor: "background.paper",
-            }}
-          >
-            <Typography variant="overline" sx={{ color: "primary.main", fontWeight: 800, letterSpacing: "0.12em" }}>
-              Cubik IA
-            </Typography>
-            <Typography variant="h6" sx={{ color: "text.primary" }}>
-              Espacio de Conversacion
-            </Typography>
-            <Typography variant="body2" sx={{ color: "text.secondary", maxWidth: 760 }}>
-              Resuelve ejercicios, adjunta imagenes y revisa formulas con una interfaz mas limpia y academica.
-            </Typography>
-          </Box>
-
-          <Box
-            sx={{
               flexGrow: 1,
               overflowY: "auto",
               px: { xs: 2, md: 4 },
@@ -128,7 +107,6 @@ export function ChatPage() {
           </Box>
         </Paper>
 
-        <AttachShortcutButton onClick={openAttachModal} />
       </Box>
 
       <HistoryDrawer

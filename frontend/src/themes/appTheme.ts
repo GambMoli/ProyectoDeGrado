@@ -9,6 +9,7 @@ export const scholarPalette = {
     primarySoft: "#E8F0FF",
     background: "#FFFFFF",
     backgroundAlt: "#F8F9FA",
+    backgroundSecondAlt: "#f8fafc",
     surface: "#F3F4F5",
     text: "#191C1D",
     textMuted: "#434652",
@@ -24,6 +25,7 @@ export const scholarPalette = {
     primarySoft: "#172554",
     background: "#0F172A",
     backgroundAlt: "#111C34",
+    backgroundSecondAlt: "#162033",
     surface: "#1E293B",
     text: "#F8FAFC",
     textMuted: "#CBD5E1",
@@ -34,6 +36,14 @@ export const scholarPalette = {
     shadow: "none",
   },
 } as const;
+
+export const avatarPalette = [
+  { color: "#1547A1", bg: "#E8F0FF" },
+  { color: "#2E7D32", bg: "#EAF5EA" },
+  { color: "#B45309", bg: "#FFF2DD" },
+  { color: "#7C3AED", bg: "#EFE7FF" },
+];
+
 
 export function createAppTheme(mode: AppThemeMode) {
   const colors = scholarPalette[mode];
@@ -50,6 +60,8 @@ export function createAppTheme(mode: AppThemeMode) {
       background: {
         default: colors.backgroundAlt,
         paper: colors.background,
+        alt: colors.backgroundSecondAlt,
+        secondAlt: colors.backgroundSecondAlt,
       },
       text: {
         primary: colors.text,

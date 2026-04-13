@@ -1,23 +1,15 @@
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
-import { Box, Paper, Typography } from "@mui/material";
+import { Box, Typography } from "@mui/material";
 
 export function EmptyConversationState() {
   return (
-    <Paper
-      sx={{
-        p: { xs: 3, md: 4 },
-        display: "flex",
-        gap: 2,
-        alignItems: "flex-start",
-        bgcolor: "background.paper",
-      }}
-    >
+    <Box sx={{ display: "flex", gap: 2, mb: 3 }}>
       <Box
         sx={{
-          width: 44,
-          height: 44,
-          borderRadius: 2,
-          bgcolor: "primary.light",
+          width: 40,
+          height: 40,
+          borderRadius: "50%",
+	        bgcolor: "primary.light",
           color: "primary.main",
           display: "flex",
           alignItems: "center",
@@ -28,15 +20,22 @@ export function EmptyConversationState() {
         <ChatBubbleOutlineIcon fontSize="small" />
       </Box>
 
-      <Box sx={{ maxWidth: 720 }}>
-        <Typography variant="h6" sx={{ mb: 1, color: "text.primary" }}>
-          Bienvenido a Cubik IA
-        </Typography>
-        <Typography variant="body2" sx={{ color: "text.secondary" }}>
-          Estoy listo para ayudarte con calculo, algebra, estadistica y otros ejercicios matematicos.
-          Puedes escribir una pregunta, insertar una formula o adjuntar una imagen del ejercicio.
+      <Box
+        sx={{
+          bgcolor: "background.paper",
+          color: "text.primary",
+          p: 2.5,
+          borderRadius: 3,
+          borderTopLeftRadius: 4,
+          maxWidth: "75%",
+        }}
+      >
+        <Typography variant="body2" sx={{ fontSize: "0.95rem" }}>
+          Hola. Soy tu asistente de <strong>Cubik IA</strong>. Estoy listo para ayudarte con
+          calculo, algebra, estadistica y otros ejercicios matematicos. Que problema resolvemos
+          hoy?
         </Typography>
       </Box>
-    </Paper>
+    </Box>
   );
 }

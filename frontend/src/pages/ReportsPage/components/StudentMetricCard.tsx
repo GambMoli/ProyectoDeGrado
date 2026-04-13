@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { Avatar, Box, Card, CardContent, Stack, Typography } from "@mui/material";
 
-import { textPrimary, textSecondary } from "../constants";
 
 interface StudentMetricCardProps {
   icon: ReactNode;
@@ -26,11 +25,11 @@ export function StudentMetricCard({
         <Stack direction="row" spacing={2} alignItems="center">
           <Avatar sx={{ bgcolor: iconBg, color: iconColor, width: 48, height: 48 }}>{icon}</Avatar>
           <Box>
-            <Typography sx={{ fontSize: 14, fontWeight: 600, color: textSecondary }}>{label}</Typography>
+            <Typography sx={{ fontSize: 14, fontWeight: 600, color: "text.secondary" }}>{label}</Typography>
             <Stack direction="row" spacing={0.75} alignItems="baseline">
-              <Typography sx={{ fontSize: 24, fontWeight: 800, color: textPrimary }}>{value}</Typography>
+              <Typography sx={{ fontSize: 24, fontWeight: 800, color: "text.primary" }}>{value}</Typography>
               {suffix ? (
-                <Typography sx={{ fontSize: 14, fontWeight: 600, color: textSecondary }}>
+                <Typography sx={{ fontSize: 14, fontWeight: 600, color: "text.secondary" }}>
                   {suffix}
                 </Typography>
               ) : null}
