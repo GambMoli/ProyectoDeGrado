@@ -37,10 +37,10 @@ export function ChatPage() {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (messagesContainerRef.current) {
+    if (messagesContainerRef.current && activeConversation?.messages.length) {
       messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
     }
-  }, [activeConversation?.messages]);
+  }, [activeConversation]);
 
   return (
     <MainLayout onOpenHistory={openHistory} onOpenAttach={openAttachModal}>
