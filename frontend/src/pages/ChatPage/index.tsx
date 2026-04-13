@@ -1,4 +1,5 @@
 import { Box, Paper, Typography } from "@mui/material";
+import { useEffect, useRef } from "react";
 
 import { StatusBanner } from "../../components";
 import { MainLayout } from "../../layouts/MainLayout";
@@ -33,6 +34,14 @@ export function ChatPage() {
     setSelectedFile,
   } = useChatPage();
 
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    }
+  }, [activeConversation?.messages]);
+
   return (
     <MainLayout onOpenHistory={openHistory} onOpenAttach={openAttachModal}>
       <Box
@@ -60,6 +69,7 @@ export function ChatPage() {
           }}
         >
           <Box
+            ref={messagesContainerRef}
             sx={{
               flexGrow: 1,
               overflowY: "auto",
