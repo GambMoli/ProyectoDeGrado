@@ -172,7 +172,7 @@ export function StudentReportsSection({
                         >
                           {initialsForName(student.display_name)}
                         </Avatar>
-                        <Typography sx={{ fontSize: 14, fontWeight: 500, color: "#1E293B" }}>
+                        <Typography sx={{ fontSize: 14, fontWeight: 500, color: "text.primary" }}>
                           {student.display_name}
                         </Typography>
                       </Stack>

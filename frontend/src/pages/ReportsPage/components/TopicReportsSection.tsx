@@ -73,7 +73,7 @@ export function TopicReportsSection({
                         py: 1.55,
                         borderRadius: 2,
                         border: isSelected ? `1.5px solid ${"#1D4ED8"}` : `1px solid ${"#DCE5F3"}`,
-                        bgcolor: isSelected ? "#6084e8" : "#FFFFFF",
+                        bgcolor: isSelected ? "#6084e8" : "background.default",
                         cursor: "pointer",
                       }}
                     >
@@ -83,7 +83,7 @@ export function TopicReportsSection({
                           height: 16,
                           borderRadius: "50%",
                           border: isSelected ? `5px solid ${"#1D4ED8"}` : "1.5px solid #CBD5E1",
-                          bgcolor: "#FFFFFF",
+                          bgcolor: "background.paper",
                           flexShrink: 0,
                         }}
                       />
@@ -108,7 +108,7 @@ export function TopicReportsSection({
                 py: 1.45,
                 textTransform: "none",
                 fontWeight: 700,
-                bgcolor: "#1D4ED8",
+                bgcolor: "background.paper",
                 boxShadow: "none",
               }}
             >
