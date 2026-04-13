@@ -35,12 +35,33 @@ export function ChatPage() {
   } = useChatPage();
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const previousConversationIdRef = useRef<string | null>(null);
+  const previousLastMessageIdRef = useRef<string | null>(null);
+
+  const lastMessageId =
+    activeConversation && activeConversation.messages.length > 0
+      ? activeConversation.messages[activeConversation.messages.length - 1].id
+      : null;
 
   useEffect(() => {
-    if (messagesContainerRef.current && activeConversation?.messages.length) {
-      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    if (isConversationLoading) {
+      return;
     }
-  }, [activeConversation]);
+
+    const conversationChanged = previousConversationIdRef.current !== activeConversation?.id;
+    const lastMessageChanged = previousLastMessageIdRef.current !== lastMessageId;
+
+    if ((conversationChanged || lastMessageChanged) && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "end",
+      });
+    }
+
+    previousConversationIdRef.current = activeConversation?.id ?? null;
+    previousLastMessageIdRef.current = lastMessageId;
+  }, [activeConversation?.id, isConversationLoading, lastMessageId]);
 
   return (
     <MainLayout onOpenHistory={openHistory} onOpenAttach={openAttachModal}>
@@ -68,15 +89,16 @@ export function ChatPage() {
             bgcolor: "background.paper",
           }}
         >
-          <Box
-            ref={messagesContainerRef}
-            sx={{
-              flexGrow: 1,
-              overflowY: "auto",
-              px: { xs: 2, md: 4 },
-              py: 3,
-              display: "flex",
-              flexDirection: "column",
+              <Box
+                ref={messagesContainerRef}
+                sx={{
+                  flexGrow: 1,
+                  overflowY: "auto",
+                  scrollBehavior: "smooth",
+                  px: { xs: 2, md: 4 },
+                  py: 3,
+                  display: "flex",
+                  flexDirection: "column",
               gap: 3,
               bgcolor: "background.default",
             }}
@@ -93,6 +115,7 @@ export function ChatPage() {
                 {activeConversation?.messages.map((message) => (
                   <ChatMessage key={message.id} message={message} />
                 ))}
+                <Box ref={messagesEndRef} sx={{ height: 1 }} />
               </>
             )}
           </Box>
