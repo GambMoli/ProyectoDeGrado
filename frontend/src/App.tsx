@@ -28,6 +28,7 @@ export default function App() {
                 <ReportsPage />
               </MainLayout>
             </ProtectedRoute>
+
           }
         />
       </Routes>

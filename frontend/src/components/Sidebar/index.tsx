@@ -2,7 +2,9 @@ import React from "react";
 import AddIcon from "@mui/icons-material/Add";
 import CalculateOutlinedIcon from "@mui/icons-material/CalculateOutlined";
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
+import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 import HistoryIcon from "@mui/icons-material/History";
+import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import {
   Box,
@@ -18,6 +20,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../../context";
 import { BrandIcon } from "../Icons";
+import { useThemeMode } from "../../themes/themeContext";
 
 interface SidebarProps {
   onOpenHistory?: () => void;
@@ -29,54 +32,105 @@ export function Sidebar({ onOpenHistory, onOpenAttach, onNavigateReports }: Side
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  const { mode, toggleMode } = useThemeMode();
 
   const handleNavigate = (path: string) => {
     navigate(path);
   };
 
+  const isActive = (path: string) => location.pathname === path;
+
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", height: "100%", bgcolor: "#fff" }}>
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100%", bgcolor: "background.paper" }}>
       <Box sx={{ p: 3, pt: 4, display: "flex", alignItems: "center", gap: 1.5 }}>
         <Box
           sx={{
             width: 40,
             height: 40,
             borderRadius: 2,
-            bgcolor: "#EFF6FF",
+            bgcolor: "primary.light",
             display: "grid",
             placeItems: "center",
-            color: "#1E3A8A",
+            color: "primary.main",
           }}
         >
           <BrandIcon style={{ width: 20, height: 20 }} />
         </Box>
         <Box>
-          <Typography variant="h6" sx={{ color: "#1E3A8A", fontWeight: 800, fontSize: "1.1rem", lineHeight: 1.2 }}>
+          <Typography
+            variant="h6"
+            sx={{
+              color: "primary.main",
+              fontWeight: 800,
+              fontSize: "1.1rem",
+              lineHeight: 1.2,
+              fontFamily: "Manrope, Inter, sans-serif",
+            }}
+          >
             Cubik IA
           </Typography>
-          <Typography variant="caption" sx={{ color: "#6B7280", fontWeight: 700, fontSize: "0.75rem" }}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+              fontWeight: 700,
+              fontSize: "0.75rem",
+              fontFamily: "Inter, Segoe UI, system-ui, sans-serif",
+            }}
+          >
             Academic Curator
           </Typography>
         </Box>
       </Box>
 
       <List sx={{ px: 2, flexGrow: 1 }}>
+        {/* Theme toggle */}
         <ListItem disablePadding sx={{ mb: 0.5 }}>
           <ListItemButton
-            selected={location.pathname === "/"}
+            onClick={toggleMode}
+            sx={{
+              borderRadius: "8px",
+              color: "text.secondary",
+              py: 1.2,
+              px: 2,
+              "&:hover": { bgcolor: "action.hover" },
+            }}
+          >
+            <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
+              {mode === "light" ? (
+                <DarkModeOutlinedIcon fontSize="small" />
+              ) : (
+                <LightModeOutlinedIcon fontSize="small" />
+              )}
+            </ListItemIcon>
+            <ListItemText
+              primary={mode === "light" ? "Modo oscuro" : "Modo claro"}
+              primaryTypographyProps={{
+                fontSize: "0.875rem",
+                fontWeight: 600,
+                fontFamily: "Inter, Segoe UI, system-ui, sans-serif",
+              }}
+            />
+          </ListItemButton>
+        </ListItem>
+
+        {/* Chat */}
+        <ListItem disablePadding sx={{ mb: 0.5 }}>
+          <ListItemButton
+            selected={isActive("/")}
             onClick={() => handleNavigate("/")}
             sx={{
               borderRadius: "8px",
-              bgcolor: location.pathname === "/" ? "#EFF6FF" : "transparent",
-              color: location.pathname === "/" ? "#1E3A8A" : "#4B5563",
+              bgcolor: isActive("/") ? "primary.light" : "transparent",
+              color: isActive("/") ? "primary.main" : "text.secondary",
               py: 1.2,
               px: 2,
               "&.Mui-selected": {
-                bgcolor: "#EFF6FF",
-                color: "#1E3A8A",
-                "&:hover": { bgcolor: "#E0EFFF" },
+                bgcolor: "primary.light",
+                color: "primary.main",
+                "&:hover": { bgcolor: "primary.light", filter: "brightness(0.95)" },
               },
-              "&:hover": { bgcolor: "#F3F4F6" },
+              "&:hover": { bgcolor: "action.hover" },
             }}
           >
             <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
@@ -84,55 +138,88 @@ export function Sidebar({ onOpenHistory, onOpenAttach, onNavigateReports }: Side
             </ListItemIcon>
             <ListItemText
               primary="Chat"
-              primaryTypographyProps={{ fontSize: "0.875rem", fontWeight: location.pathname === "/" ? 700 : 600 }}
+              primaryTypographyProps={{
+                fontSize: "0.875rem",
+                fontWeight: isActive("/") ? 700 : 600,
+                fontFamily: "Inter, Segoe UI, system-ui, sans-serif",
+              }}
             />
           </ListItemButton>
         </ListItem>
 
+        {/* History */}
         <ListItem disablePadding sx={{ mb: 0.5 }}>
           <ListItemButton
             onClick={onOpenHistory}
-            sx={{ borderRadius: "8px", color: "#4B5563", py: 1.2, px: 2, "&:hover": { bgcolor: "#F3F4F6" } }}
+            sx={{
+              borderRadius: "8px",
+              color: "text.secondary",
+              py: 1.2,
+              px: 2,
+              "&:hover": { bgcolor: "action.hover" },
+            }}
           >
             <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
               <HistoryIcon fontSize="small" />
             </ListItemIcon>
-            <ListItemText primary="History" primaryTypographyProps={{ fontSize: "0.875rem", fontWeight: 600 }} />
+            <ListItemText
+              primary="History"
+              primaryTypographyProps={{
+                fontSize: "0.875rem",
+                fontWeight: 600,
+                fontFamily: "Inter, Segoe UI, system-ui, sans-serif",
+              }}
+            />
           </ListItemButton>
         </ListItem>
 
+        {/* Exercises */}
         <ListItem disablePadding sx={{ mb: 0.5 }}>
           <ListItemButton
             onClick={onOpenAttach}
-            sx={{ borderRadius: "8px", color: "#4B5563", py: 1.2, px: 2, "&:hover": { bgcolor: "#F3F4F6" } }}
+            sx={{
+              borderRadius: "8px",
+              color: "text.secondary",
+              py: 1.2,
+              px: 2,
+              "&:hover": { bgcolor: "action.hover" },
+            }}
           >
             <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
               <CalculateOutlinedIcon fontSize="small" />
             </ListItemIcon>
-            <ListItemText primary="Exercises" primaryTypographyProps={{ fontSize: "0.875rem", fontWeight: 600 }} />
+            <ListItemText
+              primary="Exercises"
+              primaryTypographyProps={{
+                fontSize: "0.875rem",
+                fontWeight: 600,
+                fontFamily: "Inter, Segoe UI, system-ui, sans-serif",
+              }}
+            />
           </ListItemButton>
         </ListItem>
 
+        {/* Reports (teacher only) */}
         {user?.role === "teacher" ? (
           <ListItem disablePadding sx={{ mb: 0.5 }}>
             <ListItemButton
-              selected={location.pathname === "/reports"}
+              selected={isActive("/reports")}
               onClick={() => {
                 onNavigateReports?.();
                 handleNavigate("/reports");
               }}
               sx={{
                 borderRadius: "8px",
-                bgcolor: location.pathname === "/reports" ? "#EFF6FF" : "transparent",
-                color: location.pathname === "/reports" ? "#1E3A8A" : "#4B5563",
+                bgcolor: isActive("/reports") ? "primary.light" : "transparent",
+                color: isActive("/reports") ? "primary.main" : "text.secondary",
                 py: 1.2,
                 px: 2,
                 "&.Mui-selected": {
-                  bgcolor: "#EFF6FF",
-                  color: "#1E3A8A",
-                  "&:hover": { bgcolor: "#E0EFFF" },
+                  bgcolor: "primary.light",
+                  color: "primary.main",
+                  "&:hover": { bgcolor: "primary.light", filter: "brightness(0.95)" },
                 },
-                "&:hover": { bgcolor: "#F3F4F6" },
+                "&:hover": { bgcolor: "action.hover" },
               }}
             >
               <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
@@ -140,7 +227,11 @@ export function Sidebar({ onOpenHistory, onOpenAttach, onNavigateReports }: Side
               </ListItemIcon>
               <ListItemText
                 primary="Reportes"
-                primaryTypographyProps={{ fontSize: "0.875rem", fontWeight: location.pathname === "/reports" ? 700 : 600 }}
+                primaryTypographyProps={{
+                  fontSize: "0.875rem",
+                  fontWeight: isActive("/reports") ? 700 : 600,
+                  fontFamily: "Inter, Segoe UI, system-ui, sans-serif",
+                }}
               />
             </ListItemButton>
           </ListItem>
@@ -154,14 +245,18 @@ export function Sidebar({ onOpenHistory, onOpenAttach, onNavigateReports }: Side
           onClick={onOpenAttach}
           startIcon={<AddIcon />}
           sx={{
-            bgcolor: "#1E3A8A",
+            bgcolor: "primary.main",
             color: "#fff",
             borderRadius: "10px",
             textTransform: "none",
             fontWeight: 700,
+            fontFamily: "Inter, Segoe UI, system-ui, sans-serif",
             py: 1.2,
-            boxShadow: "0 10px 20px rgba(30, 58, 138, 0.15)",
-            "&:hover": { bgcolor: "#1E40AF", boxShadow: "0 10px 20px rgba(30, 58, 138, 0.25)" },
+            boxShadow: "0 10px 20px rgba(21, 71, 161, 0.15)",
+            "&:hover": {
+              bgcolor: "primary.dark",
+              boxShadow: "0 10px 20px rgba(21, 71, 161, 0.25)",
+            },
           }}
         >
           New Exercise

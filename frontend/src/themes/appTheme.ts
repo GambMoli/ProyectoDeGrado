@@ -1,70 +1,256 @@
 import { createTheme } from "@mui/material/styles";
 
-export const appTheme = createTheme({
-  palette: {
-    mode: "light",
-    primary: {
-      main: "#1D4ED8",
-      dark: "#1E3A8A",
-      light: "#DBEAFE",
-    },
-    secondary: {
-      main: "#4F46E5",
-    },
-    background: {
-      default: "#F4F7FB",
-      paper: "#FFFFFF",
-    },
-    text: {
-      primary: "#0F172A",
-      secondary: "#64748B",
-    },
-    success: {
-      main: "#16A34A",
-    },
+export type AppThemeMode = "light" | "dark";
+
+export const scholarPalette = {
+  light: {
+    primary: "#1547A1",
+    primaryStrong: "#123A84",
+    primarySoft: "#E8F0FF",
+    background: "#FFFFFF",
+    backgroundAlt: "#F8F9FA",
+    backgroundSecondAlt: "#f8fafc",
+    surface: "#F3F4F5",
+    text: "#191C1D",
+    textMuted: "#434652",
+    success: "#2E7D32",
+    error: "#D32F2F",
+    border: "#D7DEE7",
+    divider: "#E6EAEE",
+    shadow: "0 8px 24px rgba(21, 71, 161, 0.08)",
   },
-  shape: {
-    borderRadius: 16,
+  dark: {
+    primary: "#3B82F6",
+    primaryStrong: "#60A5FA",
+    primarySoft: "#172554",
+    background: "#0F172A",
+    backgroundAlt: "#111C34",
+    backgroundSecondAlt: "#162033",
+    surface: "#1E293B",
+    text: "#F8FAFC",
+    textMuted: "#CBD5E1",
+    success: "#4ADE80",
+    error: "#F87171",
+    border: "#334155",
+    divider: "#263244",
+    shadow: "none",
   },
-  typography: {
-    fontFamily: [
-      "Plus Jakarta Sans",
-      "Inter",
-      "Segoe UI",
-      "system-ui",
-      "sans-serif",
-    ].join(","),
-    h4: {
-      fontWeight: 800,
-      letterSpacing: "-0.02em",
+} as const;
+
+export const avatarPalette = [
+  { color: "#1547A1", bg: "#E8F0FF" },
+  { color: "#2E7D32", bg: "#EAF5EA" },
+  { color: "#B45309", bg: "#FFF2DD" },
+  { color: "#7C3AED", bg: "#EFE7FF" },
+];
+
+
+export function createAppTheme(mode: AppThemeMode) {
+  const colors = scholarPalette[mode];
+  const isDark = mode === "dark";
+
+  return createTheme({
+    palette: {
+      mode,
+      primary: {
+        main: colors.primary,
+        dark: colors.primaryStrong,
+        light: colors.primarySoft,
+      },
+      background: {
+        default: colors.backgroundAlt,
+        paper: colors.background,
+        alt: colors.backgroundSecondAlt,
+        secondAlt: colors.backgroundSecondAlt,
+      },
+      text: {
+        primary: colors.text,
+        secondary: colors.textMuted,
+      },
+      success: {
+        main: colors.success,
+      },
+      error: {
+        main: colors.error,
+      },
+      divider: colors.divider,
     },
-    h6: {
-      fontWeight: 800,
+    shape: {
+      borderRadius: 8,
     },
-    button: {
-      fontWeight: 700,
-      textTransform: "none",
+    typography: {
+      fontFamily: ["Inter", "Segoe UI", "system-ui", "sans-serif"].join(","),
+      h1: {
+        fontFamily: ["Manrope", "Inter", "sans-serif"].join(","),
+        fontWeight: 800,
+        letterSpacing: "-0.02em",
+      },
+      h2: {
+        fontFamily: ["Manrope", "Inter", "sans-serif"].join(","),
+        fontWeight: 800,
+        letterSpacing: "-0.02em",
+      },
+      h3: {
+        fontFamily: ["Manrope", "Inter", "sans-serif"].join(","),
+        fontWeight: 800,
+        letterSpacing: "-0.02em",
+      },
+      h4: {
+        fontFamily: ["Manrope", "Inter", "sans-serif"].join(","),
+        fontWeight: 800,
+        letterSpacing: "-0.02em",
+      },
+      h5: {
+        fontFamily: ["Manrope", "Inter", "sans-serif"].join(","),
+        fontWeight: 800,
+        letterSpacing: "-0.02em",
+      },
+      h6: {
+        fontFamily: ["Manrope", "Inter", "sans-serif"].join(","),
+        fontWeight: 800,
+        letterSpacing: "-0.02em",
+      },
+      subtitle1: {
+        fontWeight: 700,
+      },
+      button: {
+        fontWeight: 700,
+        textTransform: "none",
+      },
+      body2: {
+        lineHeight: 1.6,
+      },
     },
-  },
-  components: {
-    MuiCssBaseline: {
-      styleOverrides: {
-        body: {
-          backgroundColor: "#F4F7FB",
+    components: {
+      MuiCssBaseline: {
+        styleOverrides: {
+          ":root": {
+            colorScheme: mode,
+          },
+          body: {
+            backgroundColor: colors.backgroundAlt,
+            color: colors.text,
+          },
+          "*::selection": {
+            backgroundColor: isDark ? "rgba(59, 130, 246, 0.35)" : "rgba(21, 71, 161, 0.16)",
+          },
+          "code, pre, kbd, samp": {
+            fontFamily: ["JetBrains Mono", "Consolas", "monospace"].join(","),
+          },
+        },
+      },
+      MuiPaper: {
+        styleOverrides: {
+          root: {
+            backgroundImage: "none",
+            boxShadow: colors.shadow,
+            border: `1px solid ${colors.border}`,
+          },
+        },
+      },
+      MuiCard: {
+        styleOverrides: {
+          root: {
+            borderRadius: 8,
+            border: `1px solid ${colors.border}`,
+            boxShadow: colors.shadow,
+          },
+        },
+      },
+      MuiAppBar: {
+        styleOverrides: {
+          root: {
+            backgroundImage: "none",
+            boxShadow: "none",
+            borderBottom: `1px solid ${colors.divider}`,
+          },
+        },
+      },
+      MuiButton: {
+        defaultProps: {
+          disableElevation: true,
+        },
+        styleOverrides: {
+          root: {
+            minHeight: 44,
+            borderRadius: 8,
+            paddingInline: 18,
+          },
+          containedPrimary: {
+            "&:hover": {
+              backgroundColor: colors.primaryStrong,
+            },
+          },
+        },
+      },
+      MuiOutlinedInput: {
+        styleOverrides: {
+          root: {
+            borderRadius: 8,
+            backgroundColor: isDark ? colors.surface : colors.background,
+            "& .MuiOutlinedInput-notchedOutline": {
+              borderColor: colors.border,
+            },
+            "&:hover .MuiOutlinedInput-notchedOutline": {
+              borderColor: colors.primary,
+            },
+            "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
+              borderColor: colors.primary,
+              borderWidth: 1,
+            },
+          },
+          input: {
+            paddingTop: 12,
+            paddingBottom: 12,
+          },
+        },
+      },
+      MuiTabs: {
+        styleOverrides: {
+          indicator: {
+            height: 3,
+            borderRadius: 999,
+            backgroundColor: colors.primary,
+          },
+        },
+      },
+      MuiTab: {
+        styleOverrides: {
+          root: {
+            minHeight: 44,
+            fontWeight: 700,
+          },
+        },
+      },
+      MuiChip: {
+        styleOverrides: {
+          root: {
+            borderRadius: 8,
+          },
+        },
+      },
+      MuiAlert: {
+        styleOverrides: {
+          root: {
+            borderRadius: 8,
+          },
+        },
+      },
+      MuiTooltip: {
+        styleOverrides: {
+          tooltip: {
+            borderRadius: 8,
+            fontSize: "0.75rem",
+          },
+        },
+      },
+      MuiDrawer: {
+        styleOverrides: {
+          paper: {
+            borderRight: `1px solid ${colors.divider}`,
+          },
         },
       },
     },
-    MuiPaper: {
-      styleOverrides: {
-        root: {
-          backgroundImage: "none",
-        },
-      },
-    },
-    MuiButton: {
-      defaultProps: {
-        disableElevation: true,
-      },
-    },
-  },
-});
+  });
+}

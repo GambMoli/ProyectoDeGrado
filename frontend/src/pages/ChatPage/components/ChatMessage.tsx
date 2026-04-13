@@ -20,16 +20,16 @@ export function ChatMessage({ message }: ChatMessageProps) {
         alignItems: "flex-start",
         gap: 2,
         flexDirection: isAssistantLike ? "row" : "row-reverse",
-        mb: 3,
       }}
     >
       <Avatar
         sx={{
-          width: 32,
-          height: 32,
-          bgcolor: isAssistantLike ? "#EDF3FD" : "#F3F5F8",
-          color: isAssistantLike ? "#2154B6" : "#7C889D",
-          border: "1px solid #DFE8F7",
+          width: 40,
+          height: 40,
+          bgcolor: isAssistantLike ? "primary.light" : "background.paper",
+          color: isAssistantLike ? "primary.main" : "text.secondary",
+          border: "1px solid",
+          borderColor: "divider",
         }}
       >
         {isAssistantLike ? (
@@ -45,21 +45,18 @@ export function ChatMessage({ message }: ChatMessageProps) {
           flexDirection: "column",
           gap: 1.5,
           alignItems: isAssistantLike ? "flex-start" : "flex-end",
-          maxWidth: { xs: "90%", md: "75%" },
+          maxWidth: { xs: "100%", md: "78%" },
         }}
       >
         {shouldShowBody ? (
           <Paper
-            elevation={0}
             sx={{
-              bgcolor: isAssistantLike ? "#F3F6FB" : "#1F56BE",
-              color: isAssistantLike ? "#19315E" : "#FFF",
-              p: 2,
-              borderRadius: 3,
-              borderTopLeftRadius: isAssistantLike ? "4px" : "24px",
-              borderTopRightRadius: isAssistantLike ? "24px" : "4px",
-              border: isAssistantLike ? "1px solid #E4EAF3" : "none",
-              boxShadow: "0 10px 24px rgba(64,97,161,0.08)",
+              bgcolor: isAssistantLike ? "background.paper" : "primary.main",
+              color: isAssistantLike ? "text.primary" : "#FFFFFF",
+              p: 2.5,
+              borderTopLeftRadius: isAssistantLike ? 2 : 8,
+              borderTopRightRadius: isAssistantLike ? 8 : 2,
+              borderColor: isAssistantLike ? "divider" : "primary.main",
             }}
           >
             <MathContent content={message.content} />
@@ -68,30 +65,25 @@ export function ChatMessage({ message }: ChatMessageProps) {
 
         {resolution ? (
           <Paper
-            elevation={0}
             sx={{
               p: 3,
-              borderRadius: 3,
-              bgcolor: "#F3F6FB",
-              border: "1px solid #E2E9F3",
-              color: "#19315E",
               width: "100%",
-              boxShadow: "0 10px 24px rgba(64,97,161,0.08)",
+              bgcolor: "background.paper",
             }}
           >
-            <Typography variant="subtitle1" sx={{ fontWeight: 800, color: "#2154B6", mb: 2 }}>
-              Resolucion paso a paso:
+            <Typography variant="subtitle1" sx={{ color: "primary.main", mb: 2 }}>
+              Resolucion paso a paso
             </Typography>
 
             <Box
               component="ol"
               sx={{
                 m: 0,
-                pl: 2,
+                pl: 2.5,
                 display: "grid",
                 gap: 1.5,
-                color: "#19315E",
-                fontSize: "0.93rem",
+                color: "text.primary",
+                fontSize: "0.95rem",
               }}
             >
               {resolution.steps.map((step, index) => (
@@ -101,19 +93,14 @@ export function ChatMessage({ message }: ChatMessageProps) {
               ))}
             </Box>
 
-            <Box
+            <Paper
               sx={{
-                my: 2,
-                p: 2,
-                borderRadius: 2,
-                bgcolor: "#FFF",
-                border: "1px solid #E2E8F1",
-                display: "flex",
-                flexDirection: "column",
-                gap: 1,
+                my: 2.5,
+                p: 2.5,
+                bgcolor: "background.default",
               }}
             >
-              <Typography variant="caption" sx={{ fontWeight: 700, color: "#5C6F93" }}>
+              <Typography variant="caption" sx={{ fontWeight: 800, color: "text.secondary", display: "block", mb: 1 }}>
                 Expresion interpretada
               </Typography>
               {exercise?.extracted_expression ? (
@@ -124,7 +111,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
                   style={{ overflowX: "auto" }}
                 />
               ) : null}
-              <Typography variant="caption" sx={{ fontWeight: 700, color: "#5C6F93", mt: 1 }}>
+              <Typography variant="caption" sx={{ fontWeight: 800, color: "text.secondary", display: "block", mb: 1, mt: 2 }}>
                 Resultado
               </Typography>
               <MathFormula
@@ -133,14 +120,14 @@ export function ChatMessage({ message }: ChatMessageProps) {
                 source="plain"
                 style={{ overflowX: "auto" }}
               />
-            </Box>
+            </Paper>
 
-            <Box sx={{ color: "#5C6F93", fontSize: "0.92rem" }}>
+            <Box sx={{ color: "text.secondary", fontSize: "0.94rem" }}>
               <MathContent content={resolution.explanation} />
             </Box>
 
             {exercise?.error_message ? (
-              <Typography sx={{ color: "#C84444", mt: 2, fontSize: "0.9rem" }}>
+              <Typography sx={{ color: "error.main", mt: 2, fontSize: "0.9rem", fontWeight: 600 }}>
                 {exercise.error_message}
               </Typography>
             ) : null}

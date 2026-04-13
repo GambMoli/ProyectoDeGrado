@@ -1,14 +1,19 @@
 import React, { useState } from "react";
+import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import MenuIcon from "@mui/icons-material/Menu";
 import NotificationsNoneOutlinedIcon from "@mui/icons-material/NotificationsNoneOutlined";
-import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import {
   AppBar,
   Avatar,
   Box,
   Button,
+  Collapse,
   Drawer,
   IconButton,
+  List,
+  ListItemButton,
+  ListItemText,
   Toolbar,
   Typography,
   useMediaQuery,
@@ -25,10 +30,14 @@ interface MainLayoutProps {
   onOpenAttach?: () => void;
 }
 
+const NAV_LINKS = ["Curso", "Participantes", "Calificaciones", "Banco de contenido"];
+
 export function MainLayout({ children, onOpenHistory, onOpenAttach }: MainLayoutProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [secondaryNavOpen, setSecondaryNavOpen] = useState(false);
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const isDesktop = useMediaQuery(theme.breakpoints.up("md"));
   const drawerWidth = 260;
   const { user, logout } = useAuth();
 
@@ -47,19 +56,21 @@ export function MainLayout({ children, onOpenHistory, onOpenAttach }: MainLayout
   }
 
   return (
-    <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "#F9FAFB" }}>
+    <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "background.default" }}>
+      {/* Sidebar */}
       <Box component="nav" sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}>
         <Drawer
-          variant={isMobile ? "temporary" : "permanent"}
-          open={isMobile ? mobileOpen : true}
+          variant={isDesktop ? "permanent" : "temporary"}
+          open={isDesktop ? true : mobileOpen}
           onClose={handleDrawerToggle}
           ModalProps={{ keepMounted: true }}
           sx={{
             "& .MuiDrawer-paper": {
               boxSizing: "border-box",
               width: drawerWidth,
-              borderRight: "1px solid #E5E7EB",
-              bgcolor: "#fff",
+              borderRight: "1px solid",
+              borderColor: "divider",
+              bgcolor: "background.paper",
             },
           }}
         >
@@ -67,71 +78,117 @@ export function MainLayout({ children, onOpenHistory, onOpenAttach }: MainLayout
         </Drawer>
       </Box>
 
+      {/* Content area */}
       <Box
         sx={{
           flexGrow: 1,
           display: "flex",
           flexDirection: "column",
           width: { md: `calc(100% - ${drawerWidth}px)` },
+          minWidth: 0,
         }}
       >
         <AppBar
           position="sticky"
           elevation={0}
-          sx={{ bgcolor: "#fff", color: "#374151", borderBottom: "1px solid #E5E7EB" }}
+          sx={{
+            bgcolor: "background.paper",
+            color: "text.primary",
+            borderBottom: "1px solid",
+            borderColor: "divider",
+          }}
         >
-          <Toolbar sx={{ justifyContent: "space-between", minHeight: "64px !important" }}>
-            <Box sx={{ display: "flex", gap: 3, alignItems: "center" }}>
-              {isMobile ? (
-                <IconButton color="inherit" edge="start" onClick={handleDrawerToggle} sx={{ mr: 1 }}>
+          {/* Primary toolbar */}
+          <Toolbar
+            sx={{
+              justifyContent: "space-between",
+              minHeight: { xs: "56px !important", sm: "64px !important" },
+              px: { xs: 1.5, sm: 2, md: 3 },
+            }}
+          >
+            {/* Left side */}
+            <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 1, sm: 2, md: 3 } }}>
+              {/* Hamburger — hidden on desktop */}
+              {!isDesktop ? (
+                <IconButton color="inherit" edge="start" onClick={handleDrawerToggle}>
                   <MenuIcon />
                 </IconButton>
               ) : null}
 
-              {!isMobile ? (
-                <Typography variant="h6" sx={{ fontWeight: 800, color: "#1E3A8A" }}>
-                  Cubik IA
-                </Typography>
-              ) : null}
+              {/* Logo */}
+              <Typography
+                variant="h6"
+                sx={{
+                  fontWeight: 800,
+                  color: "primary.main",
+                  fontFamily: "Manrope, Inter, sans-serif",
+                  fontSize: { xs: "1rem", sm: "1.1rem", md: "1.25rem" },
+                }}
+              >
+                Cubik IA
+              </Typography>
 
-              <Box sx={{ display: { xs: "none", sm: "flex" }, gap: 3 }}>
-                <Typography
-                  variant="body2"
-                  sx={{ fontWeight: 600, cursor: "pointer", "&:hover": { color: "#1E3A8A" } }}
-                >
-                  Pagina Principal
-                </Typography>
-                <Typography
-                  variant="body2"
-                  sx={{ fontWeight: 600, cursor: "pointer", "&:hover": { color: "#1E3A8A" } }}
-                >
-                  Mis cursos
-                </Typography>
-              </Box>
+              {/* Top nav links — tablet and up */}
+              {!isMobile ? (
+                <Box sx={{ display: "flex", gap: { sm: 2, md: 3 } }}>
+                  {["Pagina Principal", "Mis cursos"].map((label) => (
+                    <Typography
+                      key={label}
+                      variant="body2"
+                      sx={{
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        color: "text.secondary",
+                        fontFamily: "Inter, Segoe UI, system-ui, sans-serif",
+                        fontSize: { sm: "0.8rem", md: "0.875rem" },
+                        "&:hover": { color: "primary.main" },
+                      }}
+                    >
+                      {label}
+                    </Typography>
+                  ))}
+                </Box>
+              ) : null}
             </Box>
 
-            <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
-              <IconButton size="small">
-                <NotificationsNoneOutlinedIcon />
+            {/* Right side */}
+            <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 0.5, sm: 1, md: 2 } }}>
+              <IconButton size="small" sx={{ color: "text.secondary" }}>
+                <NotificationsNoneOutlinedIcon fontSize={isMobile ? "small" : "medium"} />
               </IconButton>
-              <IconButton size="small">
-                <ChatBubbleOutlineIcon />
-              </IconButton>
+
+              {!isMobile ? (
+                <IconButton size="small" sx={{ color: "text.secondary" }}>
+                  <ChatBubbleOutlineIcon fontSize="small" />
+                </IconButton>
+              ) : null}
+
               <Button
                 onClick={() => void handleLogout()}
                 size="small"
-                sx={{ textTransform: "none", color: "#4B5563", fontWeight: 700 }}
+                sx={{
+                  textTransform: "none",
+                  color: "text.secondary",
+                  fontWeight: 700,
+                  fontFamily: "Inter, Segoe UI, system-ui, sans-serif",
+                  minWidth: "unset",
+                  px: { xs: 1, sm: 1.5 },
+                  fontSize: { xs: "0.8rem", sm: "0.875rem" },
+                  "&:hover": { color: "primary.main" },
+                }}
               >
                 Salir
               </Button>
+
               <Avatar
                 sx={{
-                  width: 32,
-                  height: 32,
-                  bgcolor: "#EED1B4",
-                  fontSize: "0.875rem",
+                  width: { xs: 28, sm: 32 },
+                  height: { xs: 28, sm: 32 },
+                  bgcolor: "primary.light",
+                  fontSize: { xs: "0.75rem", sm: "0.875rem" },
                   fontWeight: 700,
-                  color: "#9A6A38",
+                  fontFamily: "Inter, Segoe UI, system-ui, sans-serif",
+                  color: "primary.dark",
                 }}
               >
                 {(user?.display_name ?? "US").slice(0, 2).toUpperCase()}
@@ -139,51 +196,158 @@ export function MainLayout({ children, onOpenHistory, onOpenAttach }: MainLayout
             </Box>
           </Toolbar>
 
-          <Box sx={{ bgcolor: "#1E3A8A", color: "#fff", px: { xs: 2, md: 4 } }}>
-            <Box
-              sx={{
-                display: "flex",
-                gap: { xs: 2, md: 4 },
-                alignItems: "center",
-                py: 1.5,
-                overflowX: "auto",
-                whiteSpace: "nowrap",
-              }}
-            >
-              <Typography variant="body2" sx={{ cursor: "pointer", opacity: 0.8, "&:hover": { opacity: 1 } }}>
-                Curso
-              </Typography>
-              <Typography variant="body2" sx={{ cursor: "pointer", opacity: 0.8, "&:hover": { opacity: 1 } }}>
-                Participantes
-              </Typography>
-              <Typography variant="body2" sx={{ cursor: "pointer", opacity: 0.8, "&:hover": { opacity: 1 } }}>
-                Calificaciones
-              </Typography>
-              {user?.role === "teacher" ? (
-                <Typography
-                  variant="body2"
-                  sx={{ cursor: "pointer", fontWeight: 700, borderBottom: "2px solid #fff", pb: 0.5 }}
+          {/* Secondary nav */}
+          <Box sx={{ bgcolor: "primary.main", color: "#fff" }}>
+            {isMobile ? (
+              /* Mobile: collapsible dropdown */
+              <>
+                <Box
+                  onClick={() => setSecondaryNavOpen((o) => !o)}
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    px: 2,
+                    py: 1,
+                    cursor: "pointer",
+                    userSelect: "none",
+                  }}
                 >
-                  REPORTES
-                </Typography>
-              ) : null}
-              <Typography variant="body2" sx={{ cursor: "pointer", opacity: 0.8, "&:hover": { opacity: 1 } }}>
-                Banco de contenido
-              </Typography>
+                  <Typography
+                    variant="body2"
+                    sx={{ fontFamily: "Inter, Segoe UI, system-ui, sans-serif", fontWeight: 600 }}
+                  >
+                    Navegación del curso
+                  </Typography>
+                  <ExpandMoreIcon
+                    fontSize="small"
+                    sx={{
+                      transition: "transform 0.25s",
+                      transform: secondaryNavOpen ? "rotate(180deg)" : "rotate(0deg)",
+                    }}
+                  />
+                </Box>
+
+                <Collapse in={secondaryNavOpen}>
+                  <List disablePadding sx={{ pb: 1 }}>
+                    {NAV_LINKS.map((label) => (
+                      <ListItemButton
+                        key={label}
+                        sx={{ px: 3, py: 0.75, "&:hover": { bgcolor: "rgba(255,255,255,0.1)" } }}
+                      >
+                        <ListItemText
+                          primary={label}
+                          primaryTypographyProps={{
+                            fontSize: "0.875rem",
+                            fontFamily: "Inter, Segoe UI, system-ui, sans-serif",
+                            color: "#fff",
+                          }}
+                        />
+                      </ListItemButton>
+                    ))}
+
+                    {user?.role === "teacher" ? (
+                      <ListItemButton
+                        sx={{ px: 3, py: 0.75, "&:hover": { bgcolor: "rgba(255,255,255,0.1)" } }}
+                      >
+                        <ListItemText
+                          primary="Reportes"
+                          primaryTypographyProps={{
+                            fontSize: "0.875rem",
+                            fontWeight: 700,
+                            fontFamily: "Manrope, Inter, sans-serif",
+                            color: "#fff",
+                          }}
+                        />
+                      </ListItemButton>
+                    ) : null}
+
+                    <ListItemButton
+                      sx={{ px: 3, py: 0.75, "&:hover": { bgcolor: "rgba(255,255,255,0.1)" } }}
+                    >
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        <ChatBubbleOutlineIcon fontSize="small" />
+                        <Typography
+                          variant="body2"
+                          sx={{ fontFamily: "Inter, Segoe UI, system-ui, sans-serif", color: "#fff" }}
+                        >
+                          Chatbot
+                        </Typography>
+                      </Box>
+                    </ListItemButton>
+                  </List>
+                </Collapse>
+              </>
+            ) : (
+              /* Tablet & desktop: horizontal scrollable row */
               <Box
                 sx={{
                   display: "flex",
+                  gap: { sm: 2, md: 4 },
                   alignItems: "center",
-                  gap: 1,
-                  cursor: "pointer",
-                  opacity: 0.8,
-                  "&:hover": { opacity: 1 },
+                  py: 1.5,
+                  px: { sm: 2, md: 4 },
+                  overflowX: "auto",
+                  whiteSpace: "nowrap",
+                  "&::-webkit-scrollbar": { display: "none" },
+                  scrollbarWidth: "none",
                 }}
               >
-                <ChatBubbleOutlineIcon fontSize="small" />
-                <Typography variant="body2">Chatbot</Typography>
+                {NAV_LINKS.map((label) => (
+                  <Typography
+                    key={label}
+                    variant="body2"
+                    sx={{
+                      cursor: "pointer",
+                      opacity: 0.8,
+                      fontFamily: "Inter, Segoe UI, system-ui, sans-serif",
+                      fontSize: { sm: "0.8rem", md: "0.875rem" },
+                      "&:hover": { opacity: 1 },
+                    }}
+                  >
+                    {label}
+                  </Typography>
+                ))}
+
+                {user?.role === "teacher" ? (
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      cursor: "pointer",
+                      fontWeight: 700,
+                      fontFamily: "Manrope, Inter, sans-serif",
+                      borderBottom: "2px solid #fff",
+                      pb: 0.5,
+                      fontSize: { sm: "0.8rem", md: "0.875rem" },
+                    }}
+                  >
+                    REPORTES
+                  </Typography>
+                ) : null}
+
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1,
+                    cursor: "pointer",
+                    opacity: 0.8,
+                    "&:hover": { opacity: 1 },
+                  }}
+                >
+                  <ChatBubbleOutlineIcon fontSize="small" />
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontFamily: "Inter, Segoe UI, system-ui, sans-serif",
+                      fontSize: { sm: "0.8rem", md: "0.875rem" },
+                    }}
+                  >
+                    Chatbot
+                  </Typography>
+                </Box>
               </Box>
-            </Box>
+            )}
           </Box>
         </AppBar>
 

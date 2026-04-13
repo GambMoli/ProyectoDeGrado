@@ -9,8 +9,8 @@ export function EmptyConversationState() {
           width: 40,
           height: 40,
           borderRadius: "50%",
-          bgcolor: "#EFF6FF",
-          color: "#1E3A8A",
+	        bgcolor: "primary.light",
+          color: "primary.main",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -22,8 +22,8 @@ export function EmptyConversationState() {
 
       <Box
         sx={{
-          bgcolor: "#F3F4F6",
-          color: "#1F2937",
+          bgcolor: "background.paper",
+          color: "text.primary",
           p: 2.5,
           borderRadius: 3,
           borderTopLeftRadius: 4,

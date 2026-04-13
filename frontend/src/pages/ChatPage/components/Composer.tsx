@@ -28,7 +28,7 @@ interface ComposerProps {
 
 const formulaSnippets = [
   { label: "Integral", value: "∫ x^2 dx", preview: "\\int x^2\\,dx" },
-  { label: "Por Partes", value: "∫ x e^x dx", preview: "\\int x e^x\\,dx" },
+  { label: "Por partes", value: "∫ x e^x dx", preview: "\\int x e^x\\,dx" },
   { label: "Derivada", value: "d/dx (x^3 + 2x)", preview: "\\frac{d}{dx}(x^3 + 2x)" },
   { label: "Limite", value: "lim x->0 sin(x)/x", preview: "\\lim_{x \\to 0} \\sin(x)/x" },
   { label: "Ecuacion", value: "x^2 + 3x = 10", preview: "x^2 + 3x = 10" },
@@ -90,52 +90,28 @@ export function Composer({
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 2, px: 0.5 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
         <Button
           size="small"
           startIcon={<FunctionsIcon />}
           onClick={() => setIsFormulaPanelOpen((value) => !value)}
-          sx={{
-            color: isFormulaPanelOpen ? "#1E3A8A" : "#6B7280",
-            textTransform: "none",
-            fontWeight: 700,
-            fontSize: "0.75rem",
-            bgcolor: isFormulaPanelOpen ? "#EFF6FF" : "transparent",
-            "&:hover": { bgcolor: "#F3F4F6" },
-          }}
+          variant={isFormulaPanelOpen ? "contained" : "text"}
         >
           Insertar formula
         </Button>
-        <Button
-          size="small"
-          startIcon={<AttachFileIcon />}
-          onClick={onOpenAttach}
-          sx={{
-            color: "#6B7280",
-            textTransform: "none",
-            fontWeight: 700,
-            fontSize: "0.75rem",
-            "&:hover": { bgcolor: "#F3F4F6" },
-          }}
-        >
-          PNG/JPEG
+        <Button size="small" startIcon={<AttachFileIcon />} onClick={onOpenAttach} color="inherit">
+          Adjuntar PNG o JPEG
         </Button>
-        <Box sx={{ ml: "auto", width: 8, height: 8, borderRadius: "50%", bgcolor: "#10B981" }} />
+        <Typography variant="caption" sx={{ ml: { xs: 0, md: "auto" }, color: "success.main", fontWeight: 700 }}>
+          Sistema disponible
+        </Typography>
       </Box>
 
       {isFormulaPanelOpen ? (
-        <Paper
-          elevation={0}
-          sx={{
-            p: 2,
-            borderRadius: 3,
-            bgcolor: "#F9FAFB",
-            border: "1px solid #E5E7EB",
-          }}
-        >
+        <Paper sx={{ p: 2.5, bgcolor: "background.default" }}>
           <Grid container spacing={1.5}>
             {formulaSnippets.map((snippet) => (
-              <Grid item xs={6} sm={4} key={snippet.label}>
+              <Grid item xs={12} sm={6} lg={4} key={snippet.label}>
                 <Button
                   fullWidth
                   onClick={() => insertFormulaTemplate(snippet.value)}
@@ -143,53 +119,55 @@ export function Composer({
                     display: "flex",
                     flexDirection: "column",
                     alignItems: "flex-start",
-                    p: 1.5,
-                    borderRadius: 2,
-                    bgcolor: "#fff",
-                    border: "1px solid #E5E7EB",
-                    textTransform: "none",
-                    color: "inherit",
-                    "&:hover": { borderColor: "#1E3A8A", bgcolor: "#fff" },
+                    minHeight: 116,
+                    p: 2,
+                    gap: 1,
+                    bgcolor: "background.paper",
+                    border: "1px solid",
+                    borderColor: "divider",
+                    color: "text.primary",
+                    "&:hover": {
+                      bgcolor: "background.paper",
+                      borderColor: "primary.main",
+                    },
                   }}
                 >
                   <Typography
                     variant="caption"
                     sx={{
                       fontWeight: 800,
-                      color: "#1E3A8A",
-                      mb: 1,
+                      color: "primary.main",
                       textTransform: "uppercase",
+                      letterSpacing: "0.08em",
                     }}
                   >
                     {snippet.label}
                   </Typography>
-                  <Box sx={{ width: "100%", overflowX: "auto" }}>
+                  <Box sx={{ width: "100%", overflowX: "auto", textAlign: "left" }}>
                     <MathFormula expression={snippet.preview} displayMode />
                   </Box>
                 </Button>
               </Grid>
             ))}
           </Grid>
-          <Typography variant="caption" sx={{ mt: 1.5, display: "block", color: "#6B7280" }}>
+          <Typography variant="caption" sx={{ mt: 1.5, display: "block", color: "text.secondary" }}>
             El asistente entiende entradas como `∫ x^2 dx`, `d/dx (x^3)` o `lim x-&gt;0 sin(x)/x`.
           </Typography>
         </Paper>
       ) : null}
 
       {selectedFile ? (
-        <Box sx={{ px: 0.5 }}>
+        <Box>
           <Chip
             label={selectedFile.name}
             onDelete={onClearFile}
             deleteIcon={<CloseIcon sx={{ fontSize: "14px !important" }} />}
             sx={{
-              bgcolor: "#EFF6FF",
-              color: "#1E3A8A",
+              bgcolor: "primary.light",
+              color: "primary.main",
               fontWeight: 700,
-              borderRadius: "8px",
               "& .MuiChip-deleteIcon": {
-                color: "#1E3A8A",
-                "&:hover": { color: "#1E40AF" },
+                color: "primary.main",
               },
             }}
           />
@@ -197,26 +175,19 @@ export function Composer({
       ) : null}
 
       {previewLatex ? (
-        <Paper
-          elevation={0}
-          sx={{
-            p: 2,
-            borderRadius: 3,
-            bgcolor: "#F9FAFB",
-            border: "1px solid #E5E7EB",
-          }}
-        >
+        <Paper sx={{ p: 2.5, bgcolor: "background.default" }}>
           <Typography
             variant="caption"
             sx={{
               fontWeight: 800,
-              color: "#1E3A8A",
+              color: "primary.main",
               mb: 1,
               display: "block",
               textTransform: "uppercase",
+              letterSpacing: "0.08em",
             }}
           >
-            Vista previa
+            Vista previa matematica
           </Typography>
           <Box sx={{ overflowX: "auto" }}>
             <MathFormula expression={previewLatex} displayMode />
@@ -224,17 +195,14 @@ export function Composer({
         </Paper>
       ) : null}
 
-      <Box
+      <Paper
         sx={{
           display: "flex",
           alignItems: "flex-end",
           gap: 1.5,
           p: 1.5,
-          bgcolor: "#fff",
-          borderRadius: 4,
-          border: "1px solid #E5E7EB",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
-          "&:focus-within": { borderColor: "#1E3A8A" },
+          bgcolor: "background.default",
+          borderColor: "divider",
         }}
       >
         <TextField
@@ -250,7 +218,7 @@ export function Composer({
           variant="standard"
           InputProps={{
             disableUnderline: true,
-            sx: { fontSize: "0.95rem", py: 0.5 },
+            sx: { fontSize: "0.98rem", py: 0.5 },
           }}
         />
         <Tooltip title="Enviar mensaje">
@@ -258,20 +226,21 @@ export function Composer({
             <IconButton
               onClick={() => void handleSubmit()}
               disabled={disabled || (!message.trim() && !selectedFile)}
+              color="primary"
               sx={{
-                bgcolor: "#1E3A8A",
-                color: "#fff",
-                borderRadius: "12px",
+                bgcolor: "primary.main",
+                color: "#FFFFFF",
+                borderRadius: 2,
                 p: 1.5,
-                "&:hover": { bgcolor: "#1E40AF" },
-                "&.Mui-disabled": { bgcolor: "#F3F4F6", color: "#9CA3AF" },
+                "&:hover": { bgcolor: "primary.dark" },
+                "&.Mui-disabled": { bgcolor: "action.disabledBackground", color: "action.disabled" },
               }}
             >
               <SendIcon fontSize="small" />
             </IconButton>
           </span>
         </Tooltip>
-      </Box>
+      </Paper>
     </Box>
   );
 }

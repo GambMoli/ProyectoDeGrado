@@ -18,10 +18,10 @@ import {
 } from "recharts";
 
 import type { StudentReportListItem, StudentReportSummary } from "../../../types/api";
-import { accentBlue, avatarPalette, tableDivider, textPrimary, textSecondary } from "../constants";
 import { formatDateRange, formatOneDecimal, formatWholeNumber, initialsForName } from "../utils";
 import { SectionCard } from "./SectionCard";
 import { StudentMetricCard } from "./StudentMetricCard";
+import { avatarPalette } from "../../../themes/appTheme";
 
 interface WeeklyChartPoint {
   name: string;
@@ -75,8 +75,8 @@ export function StudentReportsSection({
   return (
     <>
       <Stack direction="row" spacing={1.2} alignItems="center" sx={{ mb: 2.5 }}>
-        <PersonSearchOutlinedIcon sx={{ color: accentBlue, fontSize: 23 }} />
-        <Typography sx={{ fontSize: 18, fontWeight: 800, color: textPrimary }}>
+        <PersonSearchOutlinedIcon sx={{ color: "#1547A1", fontSize: 23 }} />
+        <Typography sx={{ fontSize: 18, fontWeight: 800, color: "text.primary" }}>
           Reportes por Estudiante
         </Typography>
       </Stack>
@@ -90,8 +90,8 @@ export function StudentReportsSection({
       <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid item xs={12} lg={8}>
           <SectionCard sx={{ overflow: "hidden" }}>
-            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", px: 3, py: 2.25 }}>
-              <Typography sx={{ fontSize: 15, fontWeight: 600, color: "#1E293B" }}>
+            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", px: 3, py: 2.25, backgroundColor:"background.secondAlt" }}>
+              <Typography sx={{ fontSize: 15, fontWeight: 600, color: "text.primary" }}>
                 Seleccionar Estudiante
               </Typography>
               <TextField
@@ -99,14 +99,14 @@ export function StudentReportsSection({
                 onChange={(event) => onChangeSearch(event.target.value)}
                 placeholder="Buscar..."
                 size="small"
-                sx={{ width: { xs: "100%", sm: 262 } }}
+                sx={{ width: { xs: "100%", sm: 262 }, color: "text.secondary" }}
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
-                      <SearchIcon sx={{ fontSize: 18, color: "#94A3B8" }} />
+                      <SearchIcon sx={{ fontSize: 18, color: "text.secondary" }} />
                     </InputAdornment>
                   ),
-                  sx: { borderRadius: "12px", bgcolor: "#FFFFFF" },
+                  sx: { borderRadius: "12px", bgcolor: "background.default" },
                 }}
               />
             </Box>
@@ -117,10 +117,10 @@ export function StudentReportsSection({
                 gridTemplateColumns: "1.2fr 0.9fr 120px",
                 px: 3,
                 py: 1.5,
-                borderTop: `1px solid ${tableDivider}`,
-                borderBottom: `1px solid ${tableDivider}`,
-                bgcolor: "#FCFDFE",
-                color: textSecondary,
+                borderTop: `1px solid divider`,
+                borderBottom: `1px solid divider`,
+                bgcolor: "background.secondAlt",
+                color: "text.secondary",
               }}
             >
               <Typography sx={{ fontSize: 13, fontWeight: 700 }}>NOMBRE DEL ESTUDIANTE</Typography>
@@ -131,12 +131,12 @@ export function StudentReportsSection({
             </Box>
 
             {isStudentsLoading ? (
-              <Box sx={{ py: 8, display: "grid", placeItems: "center" }}>
-                <CircularProgress size={28} sx={{ color: accentBlue }} />
+              <Box sx={{ py: 8, display: "grid", placeItems: "center", backgroundColor:"background.paper" }}>
+                <CircularProgress size={28} sx={{ color: "#1547A1" }} />
               </Box>
             ) : students.length === 0 ? (
-              <Box sx={{ px: 3, py: 6 }}>
-                <Typography sx={{ fontSize: 14, color: textSecondary }}>
+              <Box sx={{ px: 3, py: 6, backgroundColor:"background.paper" }}>
+                <Typography sx={{ fontSize: 14, color: "text.secondary" }}>
                   No hay estudiantes con actividad en el rango seleccionado.
                 </Typography>
               </Box>
@@ -156,6 +156,7 @@ export function StudentReportsSection({
                         display: "grid",
                         gridTemplateColumns: "1.2fr 0.9fr 120px",
                         borderBottom: "1px solid #EEF2F7",
+                        backgroundColor:"background.paper"
                       }}
                     >
                       <Stack direction="row" spacing={1.75} alignItems="center">
@@ -175,14 +176,14 @@ export function StudentReportsSection({
                           {student.display_name}
                         </Typography>
                       </Stack>
-                      <Typography sx={{ fontSize: 14, fontWeight: 500, color: textSecondary, alignSelf: "center" }}>
+                      <Typography sx={{ fontSize: 14, fontWeight: 500, color: "text.secondary", alignSelf: "center" }}>
                         {student.email || "Sin correo registrado"}
                       </Typography>
-                      <Box sx={{ display: "grid", placeItems: "center" }}>
+                      <Box sx={{ display: "grid", placeItems: "center", backgroundColor:"background.paper" }}>
                         <Checkbox
                           checked={isSelected}
                           onChange={() => onSelectStudent(student.user_id)}
-                          sx={{ color: "#CBD5E1", "&.Mui-checked": { color: accentBlue } }}
+                          sx={{ color: "#CBD5E1", "&.Mui-checked": { color: "#1547A1" } }}
                         />
                       </Box>
                     </ListItem>
@@ -193,18 +194,18 @@ export function StudentReportsSection({
           </SectionCard>
         </Grid>
 
-        <Grid item xs={12} lg={4}>
-          <SectionCard sx={{ p: 3, height: "100%" }}>
+        <Grid item xs={12} lg={4} >
+          <SectionCard sx={{ p: 3, height: "100%", backgroundColor:"background.paper" }}>
             <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 3 }}>
-              <FilterAltOutlinedIcon sx={{ color: "#64748B", fontSize: 20 }} />
-              <Typography sx={{ fontSize: 16, fontWeight: 700, color: "#1E293B" }}>
+              <FilterAltOutlinedIcon sx={{ color: "#1547A1", fontSize: 20 }} />
+              <Typography sx={{ fontSize: 16, fontWeight: 700, color: "text.primary" }}>
                 Filtros de Periodo
               </Typography>
             </Stack>
 
             <Stack spacing={2.25}>
               <Box>
-                <Typography sx={{ fontSize: 14, fontWeight: 500, color: "#52627A", mb: 1 }}>
+                <Typography sx={{ fontSize: 14, fontWeight: 500, color: "text.secondary", mb: 1 }}>
                   Fecha de Inicio
                 </Typography>
                 <TextField
@@ -213,10 +214,11 @@ export function StudentReportsSection({
                   type="date"
                   value={draftStart}
                   onChange={(event) => onChangeDraftStart(event.target.value)}
+                  sx={{color:"text.secondary"}}
                   InputProps={{
                     startAdornment: (
                       <InputAdornment position="start">
-                        <CalendarTodayOutlinedIcon sx={{ fontSize: 18, color: "#94A3B8" }} />
+                        <CalendarTodayOutlinedIcon sx={{ fontSize: 18, color: "text.secondary" }} />
                       </InputAdornment>
                     ),
                     sx: { borderRadius: "12px" },
@@ -225,7 +227,7 @@ export function StudentReportsSection({
               </Box>
 
               <Box>
-                <Typography sx={{ fontSize: 14, fontWeight: 500, color: "#52627A", mb: 1 }}>
+                <Typography sx={{ fontSize: 14, fontWeight: 500, color: "text.secondary", mb: 1 }}>
                   Fecha de Fin
                 </Typography>
                 <TextField
@@ -234,10 +236,11 @@ export function StudentReportsSection({
                   type="date"
                   value={draftEnd}
                   onChange={(event) => onChangeDraftEnd(event.target.value)}
+                  sx={{color:"text.secondary"}}
                   InputProps={{
                     startAdornment: (
                       <InputAdornment position="start">
-                        <CalendarTodayOutlinedIcon sx={{ fontSize: 18, color: "#94A3B8" }} />
+                        <CalendarTodayOutlinedIcon sx={{ fontSize: 18, color: "text.secondary" }} />
                       </InputAdornment>
                     ),
                     sx: { borderRadius: "12px" },
@@ -256,7 +259,7 @@ export function StudentReportsSection({
                 borderRadius: "12px",
                 textTransform: "none",
                 fontWeight: 700,
-                bgcolor: accentBlue,
+                bgcolor: "#1547A1",
                 boxShadow: "none",
                 "&:hover": { bgcolor: "#1E40AF", boxShadow: "none" },
               }}
@@ -267,13 +270,13 @@ export function StudentReportsSection({
         </Grid>
       </Grid>
 
-      <SectionCard sx={{ p: 3, mb: 5 }}>
+      <SectionCard sx={{ p: 3, mb: 5, backgroundColor:"background.paper" }}>
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", mb: 3 }}>
           <Box>
-            <Typography sx={{ fontSize: 18, fontWeight: 800, color: textPrimary }}>
+            <Typography sx={{ fontSize: 18, fontWeight: 800, color: "text.primary" }}>
               Resultados: {selectedStudent?.display_name || "Sin estudiante seleccionado"}
             </Typography>
-            <Typography sx={{ fontSize: 14, fontWeight: 500, color: textSecondary, mt: 0.5 }}>
+            <Typography sx={{ fontSize: 14, fontWeight: 500, color: "text.secondary", mt: 0.5 }}>
               Periodo: {formatDateRange(range.start, range.end)}
             </Typography>
           </Box>
@@ -285,8 +288,8 @@ export function StudentReportsSection({
               borderRadius: "12px",
               textTransform: "none",
               fontWeight: 700,
-              color: "#334155",
-              borderColor: "#D5DEEB",
+              color: "text.primary",
+              borderColor: "divider",
             }}
           >
             Generar reporte
@@ -295,7 +298,7 @@ export function StudentReportsSection({
 
         {!selectedStudent ? (
           <Box sx={{ py: 6, display: "grid", placeItems: "center" }}>
-            <Typography sx={{ fontSize: 14, color: textSecondary }}>
+            <Typography sx={{ fontSize: 14, color: "text.secondary" }}>
               Selecciona un estudiante para ver sus metricas.
             </Typography>
           </Box>
@@ -306,7 +309,7 @@ export function StudentReportsSection({
                 <StudentMetricCard
                   icon={<QueryStatsOutlinedIcon />}
                   iconBg="#E8F0FF"
-                  iconColor={accentBlue}
+                  iconColor={"#1547A1"}
                   label="Frecuencia de Uso"
                   value={
                     isStudentMetricsLoading || !studentSummary
@@ -359,11 +362,11 @@ export function StudentReportsSection({
 
               {isStudentMetricsLoading ? (
                 <Box sx={{ minHeight: 210, display: "grid", placeItems: "center" }}>
-                  <CircularProgress size={28} sx={{ color: accentBlue }} />
+                  <CircularProgress size={28} sx={{ color: "#1547A1" }} />
                 </Box>
               ) : weeklyChartData.length === 0 ? (
                 <Box sx={{ minHeight: 210, display: "grid", placeItems: "center" }}>
-                  <Typography sx={{ fontSize: 14, color: textSecondary }}>
+                  <Typography sx={{ fontSize: 14, color: "text.secondary" }}>
                     No hay actividad registrada en el rango seleccionado.
                   </Typography>
                 </Box>
@@ -373,8 +376,8 @@ export function StudentReportsSection({
                     <AreaChart data={weeklyChartData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                       <defs>
                         <linearGradient id="studentActivityFill" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={accentBlue} stopOpacity={0.16} />
-                          <stop offset="95%" stopColor={accentBlue} stopOpacity={0.02} />
+                          <stop offset="5%" stopColor={"#1547A1"} stopOpacity={0.16} />
+                          <stop offset="95%" stopColor={"#1547A1"} stopOpacity={0.02} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid vertical={false} stroke="#EEF2F7" strokeDasharray="3 3" />
@@ -384,7 +387,7 @@ export function StudentReportsSection({
                       <Area
                         type="monotone"
                         dataKey="total"
-                        stroke={accentBlue}
+                        stroke={"#1547A1"}
                         strokeWidth={2.5}
                         fill="url(#studentActivityFill)"
                       />

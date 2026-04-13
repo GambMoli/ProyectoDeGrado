@@ -1,6 +1,4 @@
 import { Box, Typography } from "@mui/material";
-
-import { pageBackground, textPrimary } from "./constants";
 import { StudentReportsSection } from "./components/StudentReportsSection";
 import { TopicReportsSection } from "./components/TopicReportsSection";
 import { useReportsDashboard } from "./hooks/useReportsDashboard";
@@ -35,15 +33,17 @@ export function ReportsPage() {
   } = useReportsDashboard();
 
   return (
-    <Box sx={{ flexGrow: 1, bgcolor: pageBackground, minHeight: "100%" }}>
-      <Box sx={{ maxWidth: 1280, mx: "auto", px: { xs: 2, md: 3 }, py: 4 }}>
-        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 4 }}>
-          <Typography sx={{ fontSize: 26, fontWeight: 800, color: textPrimary }}>
-            Reportes
-          </Typography>
-          <Typography sx={{ fontSize: 14, fontWeight: 500, color: "#94A3B8" }}>
-            Pagina Principal / Mis cursos / Reportes
-          </Typography>
+    <Box sx={{ flexGrow: 1, bgcolor:"background.default", minHeight: "100%" }}>
+      <Box sx={{ maxWidth: 1320, mx: "auto", px: { xs: 2, md: 4 }, py: { xs: 3, md: 4 } }}>
+        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", mb: 5, gap: 3, flexWrap: "wrap" }}>
+          <Box>
+            <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.75 }}>
+              Pagina Principal / Mis cursos / Reportes
+            </Typography>
+            <Typography variant="h4" sx={{ color: "text.primary" }}>
+              Reportes
+            </Typography>
+          </Box>
         </Box>
 
         <StudentReportsSection
@@ -67,15 +67,17 @@ export function ReportsPage() {
           onSelectStudent={setSelectedStudentId}
         />
 
-        <TopicReportsSection
-          isTopicTrendLoading={isTopicTrendLoading}
-          isTopicsLoading={isTopicsLoading}
-          selectedTopic={selectedTopic}
-          selectedTopicSummary={selectedTopicSummary}
-          topicSummaries={topicSummaries}
-          topicTrendData={topicTrendData}
-          onSelectTopic={setSelectedTopic}
-        />
+        <Box sx={{ mt: { xs: 5, md: 7 } }}>
+          <TopicReportsSection
+            isTopicTrendLoading={isTopicTrendLoading}
+            isTopicsLoading={isTopicsLoading}
+            selectedTopic={selectedTopic}
+            selectedTopicSummary={selectedTopicSummary}
+            topicSummaries={topicSummaries}
+            topicTrendData={topicTrendData}
+            onSelectTopic={setSelectedTopic}
+          />
+        </Box>
       </Box>
     </Box>
   );

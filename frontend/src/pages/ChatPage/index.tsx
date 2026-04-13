@@ -1,9 +1,8 @@
-import { Box, Typography } from "@mui/material";
+import { Box, Paper, Typography } from "@mui/material";
 
 import { StatusBanner } from "../../components";
 import { MainLayout } from "../../layouts/MainLayout";
 import { AttachExerciseModal } from "./components/AttachExerciseModal";
-import { AttachShortcutButton } from "./components/AttachShortcutButton";
 import { ChatMessage } from "./components/ChatMessage";
 import { Composer } from "./components/Composer";
 import { EmptyConversationState } from "./components/EmptyConversationState";
@@ -36,51 +35,78 @@ export function ChatPage() {
 
   return (
     <MainLayout onOpenHistory={openHistory} onOpenAttach={openAttachModal}>
-      <Box sx={{ display: "flex", flexDirection: "column", height: "100%", position: "relative" }}>
-        {error ? (
-          <Box sx={{ p: 2 }}>
-            <StatusBanner tone="error" message={error} />
-          </Box>
-        ) : null}
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
+          position: "relative",
+          px: { xs: 2, md: 4 },
+          py: { xs: 2, md: 3 },
+          gap: 2,
+          bgcolor: "background.default",
+        }}
+      >
+        {error ? <StatusBanner tone="error" message={error} /> : null}
 
-        <Box
+        <Paper
           sx={{
             flexGrow: 1,
-            overflowY: "auto",
-            px: { xs: 2, md: 4 },
-            py: 3,
+            minHeight: 0,
             display: "flex",
             flexDirection: "column",
-            gap: 3,
+            overflow: "hidden",
+            bgcolor: "background.paper",
           }}
         >
-          {isConversationLoading ? (
-            <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", flexGrow: 1 }}>
-              <Typography variant="body2" sx={{ color: "#6B7280", fontWeight: 600 }}>
-                Cargando conversacion...
-              </Typography>
-            </Box>
-          ) : (
-            <>
-              {!hasMessages ? <EmptyConversationState /> : null}
-              {activeConversation?.messages.map((message) => (
-                <ChatMessage key={message.id} message={message} />
-              ))}
-            </>
-          )}
-        </Box>
+          <Box
+            sx={{
+              flexGrow: 1,
+              overflowY: "auto",
+              px: { xs: 2, md: 4 },
+              py: 3,
+              display: "flex",
+              flexDirection: "column",
+              gap: 3,
+              bgcolor: "background.default",
+            }}
+          >
+            {isConversationLoading ? (
+              <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", flexGrow: 1 }}>
+                <Typography variant="body2" sx={{ color: "text.secondary", fontWeight: 600 }}>
+                  Cargando conversacion...
+                </Typography>
+              </Box>
+            ) : (
+              <>
+                {!hasMessages ? <EmptyConversationState /> : null}
+                {activeConversation?.messages.map((message) => (
+                  <ChatMessage key={message.id} message={message} />
+                ))}
+              </>
+            )}
+          </Box>
 
-        <AttachShortcutButton onClick={openAttachModal} />
+          <Box
+            sx={{
+              px: { xs: 2, md: 4 },
+              pb: { xs: 2, md: 3 },
+              pt: 2,
+              borderTop: "1px solid",
+              borderColor: "divider",
+              bgcolor: "background.paper",
+            }}
+          >
+            <Composer
+              disabled={isSubmitting}
+              selectedFile={selectedFile}
+              onClearFile={clearSelectedFile}
+              onOpenAttach={openAttachModal}
+              onSubmit={handleComposerSubmit}
+            />
+          </Box>
+        </Paper>
 
-        <Box sx={{ px: { xs: 2, md: 4 }, pb: { xs: 2, md: 4 }, pt: 1, bgcolor: "#F9FAFB" }}>
-          <Composer
-            disabled={isSubmitting}
-            selectedFile={selectedFile}
-            onClearFile={clearSelectedFile}
-            onOpenAttach={openAttachModal}
-            onSubmit={handleComposerSubmit}
-          />
-        </Box>
       </Box>
 
       <HistoryDrawer
