@@ -52,7 +52,7 @@ class AuthService:
         if not user or not verify_password(payload.password, user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Correo o contrasena invalidos.",
+                detail="Correo o contraseña invalidos.",
             )
 
         session = self._create_session(db=db, user=user)

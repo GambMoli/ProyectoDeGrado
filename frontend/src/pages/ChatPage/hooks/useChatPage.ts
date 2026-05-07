@@ -7,7 +7,7 @@ import {
   uploadExerciseImage,
 } from "../../../api/client";
 import { useAuth } from "../../../context";
-import type { ConversationDetail, ConversationSummary } from "../../../types/api";
+import type { ConversationDetail, ConversationSummary, Message } from "../../../types/api";
 
 export function useChatPage() {
   const { user } = useAuth();
@@ -102,6 +102,33 @@ export function useChatPage() {
     setError(null);
     setIsSubmitting(true);
 
+    const optimisticMessage: Message = {
+      id: `optimistic-${Date.now()}`,
+      role: "user",
+      content: message || (selectedFile ? selectedFile.name : ""),
+      source_type: selectedFile ? "image" : "text",
+      status: "received",
+      error_message: null,
+      created_at: new Date().toISOString(),
+      exercise: null,
+    };
+
+    setActiveConversation((prev) => {
+      if (prev) {
+        return { ...prev, messages: [...prev.messages, optimisticMessage] };
+      }
+      const now = new Date().toISOString();
+      return {
+        id: "optimistic",
+        user_id: "",
+        title: "",
+        summary: null,
+        created_at: now,
+        updated_at: now,
+        messages: [optimisticMessage],
+      };
+    });
+
     try {
       const response = selectedFile
         ? await uploadExerciseImage({
@@ -118,9 +145,14 @@ export function useChatPage() {
       await loadConversation(response.conversation_id);
       await refreshConversations(response.conversation_id);
     } catch (nextError) {
-      const message =
+      const errorMessage =
         nextError instanceof Error ? nextError.message : "No se pudo enviar el mensaje.";
-      setError(message);
+      setActiveConversation((prev) =>
+        prev
+          ? { ...prev, messages: prev.messages.filter((m) => m.id !== optimisticMessage.id) }
+          : prev,
+      );
+      setError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }

@@ -1,11 +1,10 @@
 import React from "react";
 import AddIcon from "@mui/icons-material/Add";
-import CalculateOutlinedIcon from "@mui/icons-material/CalculateOutlined";
+import AssessmentIcon from "@mui/icons-material/Assessment";
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 import HistoryIcon from "@mui/icons-material/History";
 import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
-import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import {
   Box,
   Button,
@@ -19,16 +18,17 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../../context";
-import { BrandIcon } from "../Icons";
 import { useThemeMode } from "../../themes/themeContext";
+import { BrandIcon } from "../Icons";
 
 interface SidebarProps {
   onOpenHistory?: () => void;
   onOpenAttach?: () => void;
   onNavigateReports?: () => void;
+  onNewChat?: () => void;
 }
 
-export function Sidebar({ onOpenHistory, onOpenAttach, onNavigateReports }: SidebarProps) {
+export function Sidebar({ onOpenHistory, onOpenAttach, onNavigateReports, onNewChat }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
@@ -84,35 +84,43 @@ export function Sidebar({ onOpenHistory, onOpenAttach, onNavigateReports }: Side
       </Box>
 
       <List sx={{ px: 2, flexGrow: 1 }}>
-        {/* Theme toggle */}
-        <ListItem disablePadding sx={{ mb: 0.5 }}>
-          <ListItemButton
-            onClick={toggleMode}
-            sx={{
-              borderRadius: "8px",
-              color: "text.secondary",
-              py: 1.2,
-              px: 2,
-              "&:hover": { bgcolor: "action.hover" },
-            }}
-          >
-            <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
-              {mode === "light" ? (
-                <DarkModeOutlinedIcon fontSize="small" />
-              ) : (
-                <LightModeOutlinedIcon fontSize="small" />
-              )}
-            </ListItemIcon>
-            <ListItemText
-              primary={mode === "light" ? "Modo oscuro" : "Modo claro"}
-              primaryTypographyProps={{
-                fontSize: "0.875rem",
-                fontWeight: 600,
-                fontFamily: "Inter, Segoe UI, system-ui, sans-serif",
+        {/* Reports (teacher only) */}
+        {user?.role === "teacher" ? (
+          <ListItem disablePadding sx={{ mb: 0.5 }}>
+            <ListItemButton
+              selected={isActive("/reports")}
+              onClick={() => {
+                onNavigateReports?.();
+                handleNavigate("/reports");
               }}
-            />
-          </ListItemButton>
-        </ListItem>
+              sx={{
+                borderRadius: "8px",
+                bgcolor: isActive("/reports") ? "primary.light" : "transparent",
+                color: isActive("/reports") ? "primary.main" : "text.secondary",
+                py: 1.2,
+                px: 2,
+                "&.Mui-selected": {
+                  bgcolor: "primary.light",
+                  color: "primary.main",
+                  "&:hover": { bgcolor: "primary.light", filter: "brightness(0.95)" },
+                },
+                "&:hover": { bgcolor: "action.hover" },
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
+                <AssessmentIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText
+                primary="Reportes"
+                primaryTypographyProps={{
+                  fontSize: "0.875rem",
+                  fontWeight: isActive("/reports") ? 700 : 600,
+                  fontFamily: "Inter, Segoe UI, system-ui, sans-serif",
+                }}
+              />
+            </ListItemButton>
+          </ListItem>
+        ) : null}
 
         {/* Chat */}
         <ListItem disablePadding sx={{ mb: 0.5 }}>
@@ -173,10 +181,10 @@ export function Sidebar({ onOpenHistory, onOpenAttach, onNavigateReports }: Side
           </ListItemButton>
         </ListItem>
 
-        {/* Exercises */}
+        {/* Theme toggle */}
         <ListItem disablePadding sx={{ mb: 0.5 }}>
           <ListItemButton
-            onClick={onOpenAttach}
+            onClick={toggleMode}
             sx={{
               borderRadius: "8px",
               color: "text.secondary",
@@ -186,10 +194,14 @@ export function Sidebar({ onOpenHistory, onOpenAttach, onNavigateReports }: Side
             }}
           >
             <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
-              <CalculateOutlinedIcon fontSize="small" />
+              {mode === "light" ? (
+                <DarkModeOutlinedIcon fontSize="small" />
+              ) : (
+                <LightModeOutlinedIcon fontSize="small" />
+              )}
             </ListItemIcon>
             <ListItemText
-              primary="Exercises"
+              primary={mode === "light" ? "Modo oscuro" : "Modo claro"}
               primaryTypographyProps={{
                 fontSize: "0.875rem",
                 fontWeight: 600,
@@ -198,51 +210,16 @@ export function Sidebar({ onOpenHistory, onOpenAttach, onNavigateReports }: Side
             />
           </ListItemButton>
         </ListItem>
-
-        {/* Reports (teacher only) */}
-        {user?.role === "teacher" ? (
-          <ListItem disablePadding sx={{ mb: 0.5 }}>
-            <ListItemButton
-              selected={isActive("/reports")}
-              onClick={() => {
-                onNavigateReports?.();
-                handleNavigate("/reports");
-              }}
-              sx={{
-                borderRadius: "8px",
-                bgcolor: isActive("/reports") ? "primary.light" : "transparent",
-                color: isActive("/reports") ? "primary.main" : "text.secondary",
-                py: 1.2,
-                px: 2,
-                "&.Mui-selected": {
-                  bgcolor: "primary.light",
-                  color: "primary.main",
-                  "&:hover": { bgcolor: "primary.light", filter: "brightness(0.95)" },
-                },
-                "&:hover": { bgcolor: "action.hover" },
-              }}
-            >
-              <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
-                <SettingsOutlinedIcon fontSize="small" />
-              </ListItemIcon>
-              <ListItemText
-                primary="Reportes"
-                primaryTypographyProps={{
-                  fontSize: "0.875rem",
-                  fontWeight: isActive("/reports") ? 700 : 600,
-                  fontFamily: "Inter, Segoe UI, system-ui, sans-serif",
-                }}
-              />
-            </ListItemButton>
-          </ListItem>
-        ) : null}
       </List>
 
       <Box sx={{ p: 2, pb: 4 }}>
         <Button
           variant="contained"
           fullWidth
-          onClick={onOpenAttach}
+          onClick={() => {
+            onNewChat?.();
+            navigate("/", { state: { openFormulaPanel: true } });
+          }}
           startIcon={<AddIcon />}
           sx={{
             bgcolor: "primary.main",
@@ -259,7 +236,7 @@ export function Sidebar({ onOpenHistory, onOpenAttach, onNavigateReports }: Side
             },
           }}
         >
-          New Exercise
+          Nuevo ejercicio
         </Button>
       </Box>
     </Box>
