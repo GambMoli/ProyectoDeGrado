@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import CloseIcon from "@mui/icons-material/Close";
@@ -20,6 +20,7 @@ import { extractMathCandidateForPreview, MathFormula, plainMathToLatex } from ".
 
 interface ComposerProps {
   disabled: boolean;
+  openFormulaPanelTrigger?: string;
   selectedFile: File | null;
   onClearFile: () => void;
   onOpenAttach: () => void;
@@ -37,6 +38,7 @@ const formulaSnippets = [
 
 export function Composer({
   disabled,
+  openFormulaPanelTrigger,
   selectedFile,
   onClearFile,
   onOpenAttach,
@@ -45,6 +47,12 @@ export function Composer({
   const [message, setMessage] = useState("");
   const [isFormulaPanelOpen, setIsFormulaPanelOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    if (openFormulaPanelTrigger) {
+      setIsFormulaPanelOpen(true);
+    }
+  }, [openFormulaPanelTrigger]);
 
   async function handleSubmit() {
     if (disabled || (!message.trim() && !selectedFile)) {

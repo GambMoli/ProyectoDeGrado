@@ -7,9 +7,9 @@ import {
   uploadExerciseImage,
 } from "../../../api/client";
 import { useAuth } from "../../../context";
-import type { ConversationDetail, ConversationSummary } from "../../../types/api";
+import type { ConversationDetail, ConversationSummary, Message } from "../../../types/api";
 
-export function useChatPage() {
+export function useChatPage({ startNew = false } = {}) {
   const { user } = useAuth();
   const conversationStorageKey = useMemo(
     () => (user ? `calc-tutor-conversation-id:${user.id}` : "calc-tutor-conversation-id"),
@@ -18,7 +18,7 @@ export function useChatPage() {
 
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(
-    () => localStorage.getItem(conversationStorageKey),
+    () => (startNew ? null : localStorage.getItem(conversationStorageKey)),
   );
   const [activeConversation, setActiveConversation] = useState<ConversationDetail | null>(null);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
@@ -64,7 +64,7 @@ export function useChatPage() {
         return;
       }
 
-      if (items.length > 0 && !activeConversationId) {
+      if (items.length > 0 && !activeConversationId && !startNew) {
         setActiveConversationId(items[0].id);
         return;
       }
@@ -84,8 +84,8 @@ export function useChatPage() {
     }
   }
 
-  async function loadConversation(conversationId: string) {
-    setIsConversationLoading(true);
+  async function loadConversation(conversationId: string, silent = false) {
+    if (!silent) setIsConversationLoading(true);
     try {
       const detail = await getConversation(conversationId);
       setActiveConversation(detail);
@@ -94,13 +94,40 @@ export function useChatPage() {
         nextError instanceof Error ? nextError.message : "No se pudo cargar la conversacion.";
       setError(message);
     } finally {
-      setIsConversationLoading(false);
+      if (!silent) setIsConversationLoading(false);
     }
   }
 
   async function handleComposerSubmit(message: string) {
     setError(null);
     setIsSubmitting(true);
+
+    const optimisticMessage: Message = {
+      id: `optimistic-${Date.now()}`,
+      role: "user",
+      content: message || (selectedFile ? selectedFile.name : ""),
+      source_type: selectedFile ? "image" : "text",
+      status: "received",
+      error_message: null,
+      created_at: new Date().toISOString(),
+      exercise: null,
+    };
+
+    setActiveConversation((prev) => {
+      if (prev) {
+        return { ...prev, messages: [...prev.messages, optimisticMessage] };
+      }
+      const now = new Date().toISOString();
+      return {
+        id: "optimistic",
+        user_id: "",
+        title: "",
+        summary: null,
+        created_at: now,
+        updated_at: now,
+        messages: [optimisticMessage],
+      };
+    });
 
     try {
       const response = selectedFile
@@ -115,12 +142,17 @@ export function useChatPage() {
           });
 
       setSelectedFile(null);
-      await loadConversation(response.conversation_id);
+      await loadConversation(response.conversation_id, true);
       await refreshConversations(response.conversation_id);
     } catch (nextError) {
-      const message =
+      const errorMessage =
         nextError instanceof Error ? nextError.message : "No se pudo enviar el mensaje.";
-      setError(message);
+      setActiveConversation((prev) =>
+        prev
+          ? { ...prev, messages: prev.messages.filter((m) => m.id !== optimisticMessage.id) }
+          : prev,
+      );
+      setError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }

@@ -37,9 +37,6 @@ export function ReportsPage() {
       <Box sx={{ maxWidth: 1320, mx: "auto", px: { xs: 2, md: 4 }, py: { xs: 3, md: 4 } }}>
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", mb: 5, gap: 3, flexWrap: "wrap" }}>
           <Box>
-            <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.75 }}>
-              Pagina Principal / Mis cursos / Reportes
-            </Typography>
             <Typography variant="h4" sx={{ color: "text.primary" }}>
               Reportes
             </Typography>
