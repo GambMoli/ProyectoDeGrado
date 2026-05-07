@@ -171,7 +171,7 @@ export function Sidebar({ onOpenHistory, onOpenAttach, onNavigateReports, onNewC
               <HistoryIcon fontSize="small" />
             </ListItemIcon>
             <ListItemText
-              primary="History"
+              primary="Historial"
               primaryTypographyProps={{
                 fontSize: "0.875rem",
                 fontWeight: 600,
@@ -218,7 +218,7 @@ export function Sidebar({ onOpenHistory, onOpenAttach, onNavigateReports, onNewC
           fullWidth
           onClick={() => {
             onNewChat?.();
-            navigate("/", { state: { openFormulaPanel: true } });
+            navigate("/", { state: { openFormulaPanel: true, newConversation: true } });
           }}
           startIcon={<AddIcon />}
           sx={{

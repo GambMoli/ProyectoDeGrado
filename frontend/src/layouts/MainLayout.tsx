@@ -158,7 +158,7 @@ export function MainLayout({ children, onOpenHistory, onOpenAttach, onNewChat }:
           sx={{
             flexGrow: 1,
             height: "100%",
-            overflow: "hidden",
+            overflow: "auto",
             display: "flex",
             flexDirection: "column",
           }}

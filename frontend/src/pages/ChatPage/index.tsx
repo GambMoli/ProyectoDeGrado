@@ -13,6 +13,7 @@ import { useChatPage } from "./hooks/useChatPage";
 
 export function ChatPage() {
   const location = useLocation();
+  const startNew = Boolean(location.state?.newConversation);
   const {
     activeConversation,
     activeConversationId,
@@ -34,7 +35,7 @@ export function ChatPage() {
     openAttachModal,
     openHistory,
     setSelectedFile,
-  } = useChatPage();
+  } = useChatPage({ startNew });
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);

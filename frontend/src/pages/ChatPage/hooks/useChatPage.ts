@@ -9,7 +9,7 @@ import {
 import { useAuth } from "../../../context";
 import type { ConversationDetail, ConversationSummary, Message } from "../../../types/api";
 
-export function useChatPage() {
+export function useChatPage({ startNew = false } = {}) {
   const { user } = useAuth();
   const conversationStorageKey = useMemo(
     () => (user ? `calc-tutor-conversation-id:${user.id}` : "calc-tutor-conversation-id"),
@@ -18,7 +18,7 @@ export function useChatPage() {
 
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(
-    () => localStorage.getItem(conversationStorageKey),
+    () => (startNew ? null : localStorage.getItem(conversationStorageKey)),
   );
   const [activeConversation, setActiveConversation] = useState<ConversationDetail | null>(null);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
@@ -64,7 +64,7 @@ export function useChatPage() {
         return;
       }
 
-      if (items.length > 0 && !activeConversationId) {
+      if (items.length > 0 && !activeConversationId && !startNew) {
         setActiveConversationId(items[0].id);
         return;
       }
