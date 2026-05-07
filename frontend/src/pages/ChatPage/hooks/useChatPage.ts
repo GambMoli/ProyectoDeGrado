@@ -84,8 +84,8 @@ export function useChatPage() {
     }
   }
 
-  async function loadConversation(conversationId: string) {
-    setIsConversationLoading(true);
+  async function loadConversation(conversationId: string, silent = false) {
+    if (!silent) setIsConversationLoading(true);
     try {
       const detail = await getConversation(conversationId);
       setActiveConversation(detail);
@@ -94,7 +94,7 @@ export function useChatPage() {
         nextError instanceof Error ? nextError.message : "No se pudo cargar la conversacion.";
       setError(message);
     } finally {
-      setIsConversationLoading(false);
+      if (!silent) setIsConversationLoading(false);
     }
   }
 
@@ -142,7 +142,7 @@ export function useChatPage() {
           });
 
       setSelectedFile(null);
-      await loadConversation(response.conversation_id);
+      await loadConversation(response.conversation_id, true);
       await refreshConversations(response.conversation_id);
     } catch (nextError) {
       const errorMessage =

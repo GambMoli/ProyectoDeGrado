@@ -51,12 +51,7 @@ export function ChatPage() {
   function scrollToBottom(behavior: ScrollBehavior = "smooth") {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        if (messagesContainerRef.current) {
-          messagesContainerRef.current.scrollTo({
-            top: messagesContainerRef.current.scrollHeight,
-            behavior,
-          });
-        }
+        messagesEndRef.current?.scrollIntoView({ behavior, block: "end" });
       });
     });
   }
