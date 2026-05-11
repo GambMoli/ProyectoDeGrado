@@ -97,7 +97,7 @@ def get_current_token(
     if not credentials or credentials.scheme.lower() != "bearer":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Debes iniciar sesion para continuar.",
+            detail="Debes iniciar sesión para continuar.",
         )
     return credentials.credentials
 

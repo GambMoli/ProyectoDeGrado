@@ -248,7 +248,7 @@ class ConversationService:
             if len(image_bytes) > max_bytes:
                 raise HTTPException(
                     status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                    detail=f"Imagen {i} supera el maximo de {self.settings.max_upload_size_mb} MB.",
+                    detail=f"Imagen {i} supera el máximo de {self.settings.max_upload_size_mb} MB.",
                 )
 
         result = self.ocr_service.extract_text(
@@ -275,7 +275,7 @@ class ConversationService:
         if not conversation:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="No se encontro la conversacion solicitada.",
+                detail="No se encontró la conversación solicitada.",
             )
         return self._build_conversation_detail(conversation)
 

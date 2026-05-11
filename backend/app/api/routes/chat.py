@@ -41,7 +41,7 @@ async def upload_exercise_image(
     if len(files) > 2:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Maximo 2 imagenes por solicitud.",
+            detail="Máximo 2 imágenes por solicitud.",
         )
 
     images: list[tuple[bytes, str, str]] = []
@@ -55,7 +55,7 @@ async def upload_exercise_image(
         if not image_bytes:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Imagen {i}: el archivo esta vacio.",
+                detail=f"Imagen {i}: el archivo está vacío.",
             )
         images.append((image_bytes, file.filename or f"exercise-image-{i}", file.content_type))
 
