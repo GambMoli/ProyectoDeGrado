@@ -24,17 +24,20 @@ export function ChatPage() {
     isConversationLoading,
     isHistoryLoading,
     isHistoryOpen,
+    isOcrLoading,
     isSubmitting,
+    pendingOcrText,
     selectedFile,
+    clearPendingOcrText,
     clearSelectedFile,
     closeAttachModal,
     closeHistory,
     handleComposerSubmit,
+    handleFileSelected,
     handleNewConversation,
     handleSelectConversation,
     openAttachModal,
     openHistory,
-    setSelectedFile,
   } = useChatPage({ startNew });
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -149,11 +152,14 @@ export function ChatPage() {
             }}
           >
             <Composer
-              disabled={isSubmitting}
+              disabled={isSubmitting || isOcrLoading}
+              isOcrLoading={isOcrLoading}
               openFormulaPanelTrigger={openFormulaPanelTrigger}
+              pendingText={pendingOcrText}
               selectedFile={selectedFile}
               onClearFile={clearSelectedFile}
               onOpenAttach={openAttachModal}
+              onPendingTextApplied={clearPendingOcrText}
               onSubmit={handleComposerSubmit}
             />
           </Box>
@@ -172,12 +178,11 @@ export function ChatPage() {
       />
 
       <AttachExerciseModal
+        isLoading={isOcrLoading}
         isOpen={isAttachModalOpen}
-        selectedFile={selectedFile}
         onClose={closeAttachModal}
-        onSelectFile={(file) => {
-          setSelectedFile(file);
-          closeAttachModal();
+        onConfirmFiles={(files) => {
+          void handleFileSelected(files);
         }}
       />
     </MainLayout>
