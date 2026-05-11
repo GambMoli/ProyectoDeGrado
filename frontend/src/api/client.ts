@@ -6,6 +6,7 @@ import type {
   ConversationDetail,
   ConversationSummary,
   LoginPayload,
+  OcrResponse,
   ReportsOverview,
   RegisterPayload,
   StudentReportListItem,
@@ -115,21 +116,12 @@ export function sendChatMessage(payload: ChatRequest): Promise<ChatResponse> {
   });
 }
 
-export function uploadExerciseImage(payload: {
-  file: File;
-  conversationId?: string | null;
-  prompt?: string;
-}): Promise<ChatResponse> {
+export function extractImageText(files: File[]): Promise<OcrResponse> {
   const formData = new FormData();
-  formData.append("file", payload.file);
-  if (payload.conversationId) {
-    formData.append("conversation_id", payload.conversationId);
+  for (const file of files) {
+    formData.append("files", file);
   }
-  if (payload.prompt?.trim()) {
-    formData.append("prompt", payload.prompt.trim());
-  }
-
-  return request<ChatResponse>("/upload-exercise-image", {
+  return request<OcrResponse>("/upload-exercise-image", {
     method: "POST",
     body: formData,
   });

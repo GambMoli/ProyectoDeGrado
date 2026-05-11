@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 
 import {
+  extractImageText,
   getConversation,
   getConversations,
   sendChatMessage,
-  uploadExerciseImage,
 } from "../../../api/client";
 import { useAuth } from "../../../context";
 import type { ConversationDetail, ConversationSummary, Message } from "../../../types/api";
@@ -27,6 +27,8 @@ export function useChatPage({ startNew = false } = {}) {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isAttachModalOpen, setIsAttachModalOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isOcrLoading, setIsOcrLoading] = useState(false);
+  const [pendingOcrText, setPendingOcrText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -98,6 +100,30 @@ export function useChatPage({ startNew = false } = {}) {
     }
   }
 
+  async function handleFileSelected(files: File[]) {
+    if (files.length === 0) return;
+    setSelectedFile(files[0]);
+    setIsOcrLoading(true);
+    setError(null);
+    try {
+      const result = await extractImageText(files);
+      if (result.success && result.ocr_text) {
+        const formatted = result.ocr_text
+          .replace(/\$\$([^$]+)\$\$/g, (_match, expr: string) => `\\[\n${expr.trim()}\n\\]`)
+          .trim();
+        setPendingOcrText(formatted);
+      } else {
+        setError(result.error_message ?? "No se pudo extraer texto de la imagen.");
+      }
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Error procesando imagen.");
+    } finally {
+      setIsOcrLoading(false);
+      setSelectedFile(null);
+      setIsAttachModalOpen(false);
+    }
+  }
+
   async function handleComposerSubmit(message: string) {
     setError(null);
     setIsSubmitting(true);
@@ -105,8 +131,8 @@ export function useChatPage({ startNew = false } = {}) {
     const optimisticMessage: Message = {
       id: `optimistic-${Date.now()}`,
       role: "user",
-      content: message || (selectedFile ? selectedFile.name : ""),
-      source_type: selectedFile ? "image" : "text",
+      content: message,
+      source_type: "text",
       status: "received",
       error_message: null,
       created_at: new Date().toISOString(),
@@ -130,18 +156,11 @@ export function useChatPage({ startNew = false } = {}) {
     });
 
     try {
-      const response = selectedFile
-        ? await uploadExerciseImage({
-            file: selectedFile,
-            conversationId: activeConversationId,
-            prompt: message,
-          })
-        : await sendChatMessage({
-            conversation_id: activeConversationId,
-            message,
-          });
+      const response = await sendChatMessage({
+        conversation_id: activeConversationId,
+        message,
+      });
 
-      setSelectedFile(null);
       await loadConversation(response.conversation_id, true);
       await refreshConversations(response.conversation_id);
     } catch (nextError) {
@@ -181,13 +200,17 @@ export function useChatPage({ startNew = false } = {}) {
     isConversationLoading,
     isHistoryLoading,
     isHistoryOpen,
+    isOcrLoading,
     isSubmitting,
+    pendingOcrText,
     selectedFile,
     clearError: () => setError(null),
+    clearPendingOcrText: () => setPendingOcrText(null),
     clearSelectedFile: () => setSelectedFile(null),
     closeAttachModal: () => setIsAttachModalOpen(false),
     closeHistory: () => setIsHistoryOpen(false),
     handleComposerSubmit,
+    handleFileSelected,
     handleNewConversation,
     handleSelectConversation,
     openAttachModal: () => setIsAttachModalOpen(true),
