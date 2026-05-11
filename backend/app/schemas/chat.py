@@ -67,3 +67,9 @@ class ChatResponse(BaseModel):
     conversation_id: str
     user_message: MessageOut
     assistant_message: MessageOut
+
+
+class OCRResponse(BaseModel):
+    success: bool
+    ocr_text: str | None = None
+    error_message: str | None = None

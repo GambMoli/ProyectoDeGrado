@@ -38,9 +38,14 @@ class Settings(BaseSettings):
     ollama_model: str = "deepseek-r1:8b"
     ollama_timeout_seconds: int = 25
 
-    ocr_provider: str = "tesseract"
-    ocr_language: str = "eng"
-    tesseract_cmd: str | None = None
+    gemini_api_keys: Annotated[list[str], NoDecode] = Field(default_factory=list)
+
+    @field_validator("gemini_api_keys", mode="before")
+    @classmethod
+    def parse_gemini_api_keys(cls, value: str | list[str]) -> list[str]:
+        if isinstance(value, str):
+            return [k.strip() for k in value.split(",") if k.strip()]
+        return value
     max_upload_size_mb: int = 5
     knowledge_datasets_dir: str = DEFAULT_KNOWLEDGE_DATASETS_DIR
     rag_top_k: int = 4

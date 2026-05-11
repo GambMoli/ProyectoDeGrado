@@ -41,5 +41,5 @@ async def unhandled_exception_handler(_: Request, exc: Exception) -> JSONRespons
     logger.exception("Unhandled exception: %s", exc)
     return JSONResponse(
         status_code=500,
-        content={"detail": "Ocurrio un error interno procesando la solicitud."},
+        content={"detail": "Ocurrió un error interno procesando la solicitud."},
     )

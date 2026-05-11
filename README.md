@@ -8,7 +8,7 @@ MVP funcional de una plataforma web para estudiantes que resuelve ejercicios de 
 - Backend: FastAPI + SQLAlchemy + Alembic
 - Base de datos: PostgreSQL
 - Motor matematico: SymPy
-- OCR: interfaz desacoplada con implementacion inicial en Tesseract
+- OCR: Gemini (Google Generative AI) con rotacion de claves
 - LLM: Ollama local o remoto
 - Contenedores: Docker + Docker Compose
 - Proxy opcional: Nginx
@@ -41,13 +41,31 @@ MVP funcional de una plataforma web para estudiantes que resuelve ejercicios de 
 
 ## Flujo principal
 
-1. El estudiante envia texto o una imagen desde la interfaz tipo chat.
+### Envio de texto
+
+1. El estudiante escribe un mensaje en el chat.
 2. El backend crea o reutiliza un usuario anonimo y una conversacion.
 3. Si la consulta es teorica, el `intent_router_service` la enruta al modo RAG y el `topic_explanation_service` responde usando el corpus en `knowledge/`.
-4. Si la consulta es un ejercicio, el `ocr_service` extrae texto si hace falta, el `math_parser_service` detecta el tipo de problema y el `sympy_solver_service` lo resuelve.
+4. Si la consulta es un ejercicio, el `math_parser_service` detecta el tipo de problema y el `sympy_solver_service` lo resuelve.
 5. El `explanation_service` genera una explicacion pedagogica usando Ollama.
 6. Se guardan conversacion, mensajes, ejercicio y solucion.
-7. El frontend muestra problema detectado, tipo, resultado y explicacion.
+
+### Envio de imagen
+
+1. El estudiante sube una foto del ejercicio (hasta 2 imagenes por solicitud).
+2. El endpoint `POST /api/upload-exercise-image` extrae el texto usando Gemini OCR y devuelve el LaTeX transcrito.
+3. El frontend muestra el texto extraido para que el estudiante lo revise y lo envie como mensaje.
+4. A partir de ahi el flujo continua igual que si el estudiante hubiera escrito el texto manualmente.
+
+## OCR con Gemini
+
+El OCR usa la API de Google Generative AI. Gemini recibe la imagen y devuelve una transcripcion LaTeX aproximada del ejercicio escrito a mano, incluyendo errores del estudiante sin corregirlos.
+
+Caracteristicas:
+- Acepta 1 o 2 imagenes por solicitud.
+- Rotacion automatica de claves API: si una clave alcanza su cuota, el servicio pasa a la siguiente.
+- Fallback entre modelos: `gemini-3.1-flash-lite` → `gemini-2.5-flash-lite` → `gemini-2.5-flash` → `gemini-3-flash-preview`.
+- Si ninguna clave ni modelo responde, devuelve un error claro al usuario.
 
 ## Corpus de teoria
 
@@ -96,7 +114,6 @@ Variables principales:
 - `OLLAMA_BASE_URL`
 - `OLLAMA_MODEL`
 - `OLLAMA_TIMEOUT_SECONDS`
-- `OCR_PROVIDER`
 - `KNOWLEDGE_DATASETS_DIR`
 - `RAG_TOP_K`
 
@@ -110,8 +127,7 @@ Variables clave:
 - `CORS_ORIGINS`
 - `OLLAMA_BASE_URL`
 - `OLLAMA_MODEL`
-- `OCR_PROVIDER`
-- `OCR_LANGUAGE`
+- `GEMINI_API_KEYS` — claves de la API de Gemini separadas por coma
 - `MAX_UPLOAD_SIZE_MB`
 - `KNOWLEDGE_DATASETS_DIR`
 - `RAG_TOP_K`
@@ -183,11 +199,11 @@ npm run dev
 
 ## Endpoints principales
 
-- `POST /api/chat`
-- `POST /api/upload-exercise-image`
-- `GET /api/conversations`
-- `GET /api/conversations/{id}`
-- `GET /api/health`
+- `POST /api/chat` — envia un mensaje de texto al tutor
+- `POST /api/upload-exercise-image` — extrae LaTeX de 1 o 2 imagenes via Gemini OCR
+- `GET /api/conversations` — lista conversaciones del usuario
+- `GET /api/conversations/{id}` — detalle de una conversacion
+- `GET /api/health` — estado del servicio
 
 Documentacion automatica:
 
@@ -206,7 +222,7 @@ Casos implementados en SymPy:
 
 Comportamientos de error:
 
-- mensaje claro si el OCR falla,
+- mensaje claro si el OCR falla o Gemini no esta disponible,
 - mensaje claro si el parser no entiende el ejercicio,
 - mensaje claro si SymPy no logra resolver el caso,
 - error explicito si Ollama no esta disponible.
@@ -220,7 +236,8 @@ Comportamientos de error:
 ## Decisiones de arquitectura
 
 - Se usa un usuario anonimo simple almacenado en `localStorage` para evitar una capa de autenticacion prematura.
-- El OCR esta detras de una interfaz; Tesseract es la implementacion inicial por costo y RAM moderados.
+- El OCR usa Gemini (Google Generative AI) con rotacion de claves y fallback entre modelos.
+- El endpoint de imagen solo realiza OCR y devuelve el texto; el modelo LLM solo se involucra cuando el usuario envia el mensaje por el chat.
 - Ollama es obligatorio para el flujo conversacional, la explicacion teorica y la practica guiada.
 - `messages`, `exercises` y `solved_exercises` estan separados para conservar trazabilidad entre entrada, extraccion matematica y salida final.
 - El backend usa Python 3.12 en Docker por estabilidad del stack FastAPI/Pydantic.
@@ -231,7 +248,6 @@ Mas detalle: [docs/ARCHITECTURE_DECISIONS.md](docs/ARCHITECTURE_DECISIONS.md)
 
 - autenticacion real con cuentas y sesiones,
 - parser mas robusto para lenguaje natural y notacion matematica mixta,
-- OCR especializado en formulas con proveedor alterno como Pix2Text,
 - recuperacion semantica con embeddings y `pgvector`,
 - simulacros de examen con banco de preguntas y correccion automatica,
 - streaming de respuesta,
