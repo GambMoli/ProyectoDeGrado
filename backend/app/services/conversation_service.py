@@ -10,7 +10,7 @@ from app.models.conversation import Conversation
 from app.models.exercise import Exercise
 from app.models.message import Message
 from app.repositories.conversation_repository import ConversationRepository
-from app.schemas.chat import ChatRequest, ChatResponse, ExerciseOut, ExerciseResolutionOut, MessageOut
+from app.schemas.chat import ChatRequest, ChatResponse, ExerciseOut, ExerciseResolutionOut, MessageOut, OCRResponse
 from app.schemas.conversation import ConversationDetail, ConversationSummary
 from app.schemas.enums import ChatMode, ExerciseStatus, MessageRole, MessageStatus, SourceType
 from app.services.conversation_orchestrator_service import ConversationOrchestratorService
@@ -238,112 +238,27 @@ class ConversationService:
             db.rollback()
             raise
 
-    def process_image_message(
+    def extract_text_from_images(
         self,
         *,
-        db: Session,
-        image_bytes: bytes,
-        filename: str,
-        content_type: str,
-        user_id: str | None,
-        conversation_id: str | None,
-        prompt: str | None,
-    ) -> ChatResponse:
-        if len(image_bytes) > self.settings.max_upload_size_mb * 1024 * 1024:
-            raise HTTPException(
-                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                detail=f"La imagen supera el maximo de {self.settings.max_upload_size_mb} MB.",
-            )
-
-        try:
-            user = self.repository.get_or_create_user(db, user_id)
-            conversation = self.repository.get_or_create_conversation(
-                db,
-                user_id=user.id,
-                conversation_id=conversation_id,
-                title_hint=prompt or filename,
-            )
-            message_content = prompt.strip() if prompt else f"Imagen subida: {filename}"
-            user_message = self.repository.create_message(
-                db,
-                conversation_id=conversation.id,
-                role=MessageRole.USER.value,
-                content=message_content,
-                source_type=SourceType.IMAGE.value,
-                status=MessageStatus.RECEIVED.value,
-            )
-            exercise = self.repository.create_exercise(
-                db,
-                conversation_id=conversation.id,
-                user_message_id=user_message.id,
-                source_type=SourceType.IMAGE.value,
-                raw_input=prompt.strip() if prompt else message_content,
-            )
-            user_message.submitted_exercise = exercise
-
-            ocr_result = self.ocr_service.extract_text(
-                image_bytes=image_bytes,
-                filename=filename,
-                content_type=content_type,
-            )
-            exercise.ocr_text = ocr_result.text or ocr_result.raw_text
-
-            if not ocr_result.success or not ocr_result.text:
-                assistant_message = self.repository.create_message(
-                    db,
-                    conversation_id=conversation.id,
-                    role=MessageRole.ASSISTANT.value,
-                    content=ocr_result.error_message
-                    or "No pude extraer el ejercicio de la imagen. Intenta con otra foto o escribe el ejercicio manualmente.",
-                    source_type=SourceType.IMAGE.value,
-                    status=MessageStatus.NEEDS_CLARIFICATION.value,
-                    error_message=ocr_result.error_message,
-                )
-                exercise.status = ExerciseStatus.OCR_FAILED.value
-                exercise.error_message = (
-                    ocr_result.error_message
-                    or "No se pudo extraer texto matematico desde la imagen."
-                )
-                exercise.assistant_message = assistant_message
-                self.repository.touch_conversation(
-                    db,
-                    conversation,
-                    summary=assistant_message.content,
-                    title_hint=prompt or filename,
-                )
-                db.commit()
-                return ChatResponse(
-                    user_id=user.id,
-                    conversation_id=conversation.id,
-                    user_message=self._build_message_out(user_message),
-                    assistant_message=self._build_message_out(assistant_message),
+        images: list[tuple[bytes, str, str]],
+    ) -> OCRResponse:
+        max_bytes = self.settings.max_upload_size_mb * 1024 * 1024
+        for i, (image_bytes, filename, _) in enumerate(images, start=1):
+            if len(image_bytes) > max_bytes:
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail=f"Imagen {i} supera el maximo de {self.settings.max_upload_size_mb} MB.",
                 )
 
-            combined_input = "\n".join(
-                part for part in [prompt, ocr_result.text] if part and part.strip()
-            )
-            exercise.raw_input = combined_input
-            response = self._solve_and_respond(
-                db=db,
-                user_id=user.id,
-                conversation=conversation,
-                user_message=user_message,
-                source_type=SourceType.IMAGE,
-                raw_input=combined_input,
-                ocr_text=ocr_result.text,
-                existing_exercise=exercise,
-            )
-            db.commit()
-            return response
-        except LookupError as exc:
-            db.rollback()
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-        except HTTPException:
-            db.rollback()
-            raise
-        except Exception:
-            db.rollback()
-            raise
+        result = self.ocr_service.extract_text(
+            images=[(b, fn, ct) for b, fn, ct in images],
+        )
+        return OCRResponse(
+            success=result.success,
+            ocr_text=result.text,
+            error_message=result.error_message,
+        )
 
     def list_conversations(self, *, db: Session, user_id: str | None) -> list[ConversationSummary]:
         conversations = self.repository.list_conversations(db, user_id)
