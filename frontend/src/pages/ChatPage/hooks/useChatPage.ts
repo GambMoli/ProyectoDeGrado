@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 
 import {
+  extractImageText,
   getConversation,
   getConversations,
   sendChatMessage,
-  uploadExerciseImage,
 } from "../../../api/client";
 import { useAuth } from "../../../context";
-import type { ConversationDetail, ConversationSummary } from "../../../types/api";
+import type { ConversationDetail, ConversationSummary, Message } from "../../../types/api";
 
-export function useChatPage() {
+export function useChatPage({ startNew = false } = {}) {
   const { user } = useAuth();
   const conversationStorageKey = useMemo(
     () => (user ? `calc-tutor-conversation-id:${user.id}` : "calc-tutor-conversation-id"),
@@ -18,7 +18,7 @@ export function useChatPage() {
 
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(
-    () => localStorage.getItem(conversationStorageKey),
+    () => (startNew ? null : localStorage.getItem(conversationStorageKey)),
   );
   const [activeConversation, setActiveConversation] = useState<ConversationDetail | null>(null);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
@@ -27,6 +27,8 @@ export function useChatPage() {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isAttachModalOpen, setIsAttachModalOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isOcrLoading, setIsOcrLoading] = useState(false);
+  const [pendingOcrText, setPendingOcrText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -64,7 +66,7 @@ export function useChatPage() {
         return;
       }
 
-      if (items.length > 0 && !activeConversationId) {
+      if (items.length > 0 && !activeConversationId && !startNew) {
         setActiveConversationId(items[0].id);
         return;
       }
@@ -84,8 +86,8 @@ export function useChatPage() {
     }
   }
 
-  async function loadConversation(conversationId: string) {
-    setIsConversationLoading(true);
+  async function loadConversation(conversationId: string, silent = false) {
+    if (!silent) setIsConversationLoading(true);
     try {
       const detail = await getConversation(conversationId);
       setActiveConversation(detail);
@@ -94,7 +96,31 @@ export function useChatPage() {
         nextError instanceof Error ? nextError.message : "No se pudo cargar la conversacion.";
       setError(message);
     } finally {
-      setIsConversationLoading(false);
+      if (!silent) setIsConversationLoading(false);
+    }
+  }
+
+  async function handleFileSelected(files: File[]) {
+    if (files.length === 0) return;
+    setSelectedFile(files[0]);
+    setIsOcrLoading(true);
+    setError(null);
+    try {
+      const result = await extractImageText(files);
+      if (result.success && result.ocr_text) {
+        const formatted = result.ocr_text
+          .replace(/\$\$([^$]+)\$\$/g, (_match, expr: string) => `\\[\n${expr.trim()}\n\\]`)
+          .trim();
+        setPendingOcrText(formatted);
+      } else {
+        setError(result.error_message ?? "No se pudo extraer texto de la imagen.");
+      }
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Error procesando imagen.");
+    } finally {
+      setIsOcrLoading(false);
+      setSelectedFile(null);
+      setIsAttachModalOpen(false);
     }
   }
 
@@ -102,25 +128,50 @@ export function useChatPage() {
     setError(null);
     setIsSubmitting(true);
 
-    try {
-      const response = selectedFile
-        ? await uploadExerciseImage({
-            file: selectedFile,
-            conversationId: activeConversationId,
-            prompt: message,
-          })
-        : await sendChatMessage({
-            conversation_id: activeConversationId,
-            message,
-          });
+    const optimisticMessage: Message = {
+      id: `optimistic-${Date.now()}`,
+      role: "user",
+      content: message,
+      source_type: "text",
+      status: "received",
+      error_message: null,
+      created_at: new Date().toISOString(),
+      exercise: null,
+    };
 
-      setSelectedFile(null);
-      await loadConversation(response.conversation_id);
+    setActiveConversation((prev) => {
+      if (prev) {
+        return { ...prev, messages: [...prev.messages, optimisticMessage] };
+      }
+      const now = new Date().toISOString();
+      return {
+        id: "optimistic",
+        user_id: "",
+        title: "",
+        summary: null,
+        created_at: now,
+        updated_at: now,
+        messages: [optimisticMessage],
+      };
+    });
+
+    try {
+      const response = await sendChatMessage({
+        conversation_id: activeConversationId,
+        message,
+      });
+
+      await loadConversation(response.conversation_id, true);
       await refreshConversations(response.conversation_id);
     } catch (nextError) {
-      const message =
+      const errorMessage =
         nextError instanceof Error ? nextError.message : "No se pudo enviar el mensaje.";
-      setError(message);
+      setActiveConversation((prev) =>
+        prev
+          ? { ...prev, messages: prev.messages.filter((m) => m.id !== optimisticMessage.id) }
+          : prev,
+      );
+      setError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -149,13 +200,17 @@ export function useChatPage() {
     isConversationLoading,
     isHistoryLoading,
     isHistoryOpen,
+    isOcrLoading,
     isSubmitting,
+    pendingOcrText,
     selectedFile,
     clearError: () => setError(null),
+    clearPendingOcrText: () => setPendingOcrText(null),
     clearSelectedFile: () => setSelectedFile(null),
     closeAttachModal: () => setIsAttachModalOpen(false),
     closeHistory: () => setIsHistoryOpen(false),
     handleComposerSubmit,
+    handleFileSelected,
     handleNewConversation,
     handleSelectConversation,
     openAttachModal: () => setIsAttachModalOpen(true),

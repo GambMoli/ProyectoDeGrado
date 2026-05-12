@@ -46,6 +46,12 @@ export interface Message {
   exercise: Exercise | null;
 }
 
+export interface OcrResponse {
+  success: boolean;
+  ocr_text: string | null;
+  error_message: string | null;
+}
+
 export interface ChatRequest {
   user_id?: string | null;
   conversation_id?: string | null;

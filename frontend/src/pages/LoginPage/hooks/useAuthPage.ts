@@ -14,13 +14,36 @@ interface RegisterFormState {
   displayName: string;
   email: string;
   password: string;
+  confirmPassword: string;
   role: Role;
   teacherAccessCode: string;
 }
 
+interface FormFieldErrors {
+  displayName?: string;
+  email?: string;
+  password?: string;
+  confirmPassword?: string;
+  teacherAccessCode?: string;
+}
+
+const PASSWORD_STANDARD_MESSAGE =
+  "La contrase\u00f1a debe tener al menos 8 caracteres, una may\u00fascula, una min\u00fascula, un n\u00famero y un car\u00e1cter especial.";
+
 function isValidEmail(value: string): boolean {
   const normalized = value.trim();
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized);
+}
+
+function matchesPasswordStandard(value: string): boolean {
+  const normalized = value.trim();
+  return (
+    normalized.length >= 8 &&
+    /[A-Z]/.test(normalized) &&
+    /[a-z]/.test(normalized) &&
+    /\d/.test(normalized) &&
+    /[^A-Za-z0-9]/.test(normalized)
+  );
 }
 
 const initialLoginState: LoginFormState = {
@@ -32,6 +55,7 @@ const initialRegisterState: RegisterFormState = {
   displayName: "",
   email: "",
   password: "",
+  confirmPassword: "",
   role: "student",
   teacherAccessCode: "",
 };
@@ -43,47 +67,90 @@ export function useAuthPage() {
   const [registerForm, setRegisterForm] = useState(initialRegisterState);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loginErrors, setLoginErrors] = useState<FormFieldErrors>({});
+  const [registerErrors, setRegisterErrors] = useState<FormFieldErrors>({});
 
   const subtitle = useMemo(
     () =>
       tab === "login"
-        ? "Inicia sesion para acceder al tutor y a tu historial."
+        ? "Inicia sesi\u00f3n para acceder al tutor y a tu historial."
         : "Crea una cuenta para usar el tutor. Los profesores pueden ver reportes.",
     [tab],
   );
 
-  function validateCurrentForm(): string | null {
-    if (tab === "login") {
-      if (!isValidEmail(loginForm.email)) {
-        return "Ingresa un correo valido para iniciar sesion.";
-      }
-      if (loginForm.password.trim().length < 8) {
-        return "La contrasena debe tener al menos 8 caracteres.";
-      }
-      return null;
+  function validateLoginForm(values: LoginFormState): FormFieldErrors {
+    const nextErrors: FormFieldErrors = {};
+
+    if (!values.email.trim()) {
+      nextErrors.email = "El correo es obligatorio.";
+    } else if (!isValidEmail(values.email)) {
+      nextErrors.email = "Ingresa un correo v\u00e1lido.";
     }
 
-    if (registerForm.displayName.trim().length < 2) {
-      return "Ingresa un nombre valido.";
+    if (!values.password.trim()) {
+      nextErrors.password = "La contrase\u00f1a es obligatoria.";
+    } else if (values.password.trim().length < 8) {
+      nextErrors.password = "La contrase\u00f1a debe tener al menos 8 caracteres.";
     }
-    if (!isValidEmail(registerForm.email)) {
-      return "Ingresa un correo valido para registrarte.";
+
+    return nextErrors;
+  }
+
+  function validateRegisterForm(values: RegisterFormState): FormFieldErrors {
+    const nextErrors: FormFieldErrors = {};
+
+    if (values.displayName.trim().length < 2) {
+      nextErrors.displayName = "Ingresa un nombre v\u00e1lido.";
     }
-    if (registerForm.password.trim().length < 8) {
-      return "La contrasena debe tener al menos 8 caracteres.";
+
+    if (!values.email.trim()) {
+      nextErrors.email = "El correo es obligatorio.";
+    } else if (!isValidEmail(values.email)) {
+      nextErrors.email = "Ingresa un correo v\u00e1lido.";
     }
-    if (registerForm.role === "teacher" && !registerForm.teacherAccessCode.trim()) {
-      return "Para crear un profesor debes ingresar el codigo de acceso.";
+
+    if (!values.password.trim()) {
+      nextErrors.password = "La contrase\u00f1a es obligatoria.";
+    } else if (!matchesPasswordStandard(values.password)) {
+      nextErrors.password = PASSWORD_STANDARD_MESSAGE;
     }
-    return null;
+
+    if (!values.confirmPassword.trim()) {
+      nextErrors.confirmPassword = "Confirma tu contrase\u00f1a.";
+    } else if (values.password !== values.confirmPassword) {
+      nextErrors.confirmPassword = "Las contrase\u00f1as no coinciden.";
+    }
+
+    if (values.role === "teacher" && !values.teacherAccessCode.trim()) {
+      nextErrors.teacherAccessCode = "Ingresa el c\u00f3digo de acceso para profesor.";
+    }
+
+    return nextErrors;
+  }
+
+  function getFirstErrorMessage(errors: FormFieldErrors): string | null {
+    return Object.values(errors).find((value) => Boolean(value)) ?? null;
   }
 
   async function handleSubmit() {
     setError(null);
-    const validationError = validateCurrentForm();
-    if (validationError) {
-      setError(validationError);
-      return;
+
+    if (tab === "login") {
+      const nextErrors = validateLoginForm(loginForm);
+      setLoginErrors(nextErrors);
+      const validationError = getFirstErrorMessage(nextErrors);
+      if (validationError) {
+        setError(validationError);
+        return;
+      }
+    } else {
+      const nextErrors = validateRegisterForm(registerForm);
+      setRegisterErrors(nextErrors);
+      const validationError = getFirstErrorMessage(nextErrors);
+      if (validationError) {
+        setError(validationError);
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -105,7 +172,7 @@ export function useAuthPage() {
       setError(
         nextError instanceof Error
           ? nextError.message
-          : "No se pudo completar la autenticacion.",
+          : "No se pudo completar la autenticaci\u00f3n.",
       );
     } finally {
       setIsSubmitting(false);
@@ -116,13 +183,19 @@ export function useAuthPage() {
     error,
     isSubmitting,
     loginForm,
+    loginErrors,
     registerForm,
+    registerErrors,
     subtitle,
     tab,
     clearError: () => setError(null),
     handleSubmit,
+    validateLoginForm,
+    validateRegisterForm,
     setLoginForm,
+    setLoginErrors,
     setRegisterForm,
+    setRegisterErrors,
     setTab,
   };
 }

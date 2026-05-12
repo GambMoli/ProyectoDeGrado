@@ -1,46 +1,77 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import CameraAltOutlinedIcon from "@mui/icons-material/CameraAltOutlined";
 import CloudUploadOutlinedIcon from "@mui/icons-material/CloudUploadOutlined";
 import CloseIcon from "@mui/icons-material/Close";
-import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import CheckIcon from "@mui/icons-material/Check";
+import ImageOutlinedIcon from "@mui/icons-material/ImageOutlined";
 import {
   Box,
   Button,
+  Chip,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   IconButton,
-  Paper,
   Typography,
 } from "@mui/material";
 
+const MAX_FILES = 2;
+
 interface AttachExerciseModalProps {
+  isLoading?: boolean;
   isOpen: boolean;
-  selectedFile: File | null;
   onClose: () => void;
-  onSelectFile: (file: File) => void;
+  onConfirmFiles: (files: File[]) => void;
 }
 
 export function AttachExerciseModal({
+  isLoading = false,
   isOpen,
-  selectedFile,
   onClose,
-  onSelectFile,
+  onConfirmFiles,
 }: AttachExerciseModalProps) {
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+
+  const isAtLimit = pendingFiles.length >= MAX_FILES || isLoading;
+
+  useEffect(() => {
+    if (!isOpen) {
+      setPendingFiles([]);
+    }
+  }, [isOpen]);
 
   function handleFileSelection(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) {
       return;
     }
-
-    onSelectFile(file);
+    setPendingFiles((prev) => {
+      if (prev.length >= MAX_FILES) return prev;
+      return [...prev, file];
+    });
     event.target.value = "";
   }
+
+  function removeFile(index: number) {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function handleConfirm() {
+    if (pendingFiles.length === 0) return;
+    onConfirmFiles(pendingFiles);
+  }
+
+  const confirmLabel =
+    pendingFiles.length === 0
+      ? "Confirmar"
+      : pendingFiles.length === 1
+        ? "Confirmar (1 imagen)"
+        : "Confirmar (2 imágenes)";
 
   return (
     <Dialog
@@ -74,34 +105,38 @@ export function AttachExerciseModal({
             Adjuntar ejercicio
           </Typography>
         </Box>
-        <IconButton aria-label="close" onClick={onClose} sx={{ color: "text.secondary" }}>
+        <IconButton aria-label="close" onClick={onClose} disabled={isLoading} sx={{ color: "text.secondary" }}>
           <CloseIcon />
         </IconButton>
       </DialogTitle>
 
       <DialogContent sx={{ p: 2 }}>
-        <Box sx={{ display: "flex", gap: 2, mb: 3, flexDirection: { xs: "column", sm: "row" } }}>
+        <Box sx={{ display: "flex", gap: 2, mb: pendingFiles.length > 0 ? 2 : 3, flexDirection: { xs: "column", sm: "row" } }}>
           <Box
             component="button"
-            onClick={() => uploadInputRef.current?.click()}
+            onClick={() => !isAtLimit && uploadInputRef.current?.click()}
+            disabled={isAtLimit}
             sx={{
               flex: 1,
               border: "1px dashed",
-              borderColor: "divider",
+              borderColor: isAtLimit ? "action.disabled" : "divider",
               borderRadius: 2,
               p: 3,
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
               bgcolor: "background.default",
-              cursor: "pointer",
+              cursor: isAtLimit ? "not-allowed" : "pointer",
+              opacity: isAtLimit ? 0.45 : 1,
               transition: "all 0.2s ease",
-              "&:hover": { borderColor: "primary.main", bgcolor: "primary.light" },
+              "&:hover": isAtLimit
+                ? {}
+                : { borderColor: "primary.main", bgcolor: "primary.light" },
             }}
           >
             <Box
               sx={{
-                bgcolor: "primary.main",
+                bgcolor: isAtLimit ? "action.disabled" : "primary.main",
                 color: "white",
                 borderRadius: 2,
                 p: 1.5,
@@ -111,7 +146,7 @@ export function AttachExerciseModal({
             >
               <CloudUploadOutlinedIcon />
             </Box>
-            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: "text.primary", mb: 0.5 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: isAtLimit ? "text.disabled" : "text.primary", mb: 0.5 }}>
               Subir archivo
             </Typography>
             <Typography variant="caption" sx={{ color: "text.secondary", fontWeight: 600 }}>
@@ -121,25 +156,29 @@ export function AttachExerciseModal({
 
           <Box
             component="button"
-            onClick={() => cameraInputRef.current?.click()}
+            onClick={() => !isAtLimit && cameraInputRef.current?.click()}
+            disabled={isAtLimit}
             sx={{
               flex: 1,
               border: "1px dashed",
-              borderColor: "divider",
+              borderColor: isAtLimit ? "action.disabled" : "divider",
               borderRadius: 2,
               p: 3,
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
               bgcolor: "background.default",
-              cursor: "pointer",
+              cursor: isAtLimit ? "not-allowed" : "pointer",
+              opacity: isAtLimit ? 0.45 : 1,
               transition: "all 0.2s ease",
-              "&:hover": { borderColor: "primary.main", bgcolor: "primary.light" },
+              "&:hover": isAtLimit
+                ? {}
+                : { borderColor: "primary.main", bgcolor: "primary.light" },
             }}
           >
             <Box
               sx={{
-                bgcolor: "primary.main",
+                bgcolor: isAtLimit ? "action.disabled" : "primary.main",
                 color: "white",
                 borderRadius: 2,
                 p: 1.5,
@@ -149,7 +188,7 @@ export function AttachExerciseModal({
             >
               <CameraAltOutlinedIcon />
             </Box>
-            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: "text.primary", mb: 0.5 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: isAtLimit ? "text.disabled" : "text.primary", mb: 0.5 }}>
               Usar camara
             </Typography>
             <Typography variant="caption" sx={{ color: "text.secondary", fontWeight: 600 }}>
@@ -158,30 +197,77 @@ export function AttachExerciseModal({
           </Box>
         </Box>
 
-        <Paper
-          sx={{
-            bgcolor: "background.default",
-            p: 2,
-            display: "flex",
-            gap: 1.5,
-            alignItems: "center",
-          }}
-        >
-          <InfoOutlinedIcon sx={{ color: "primary.main" }} />
-          <Box>
-            <Typography variant="caption" sx={{ fontWeight: 700, color: "text.secondary", display: "block" }}>
-              Formatos permitidos
-            </Typography>
-            <Typography variant="caption" sx={{ fontWeight: 800, color: "primary.main" }}>
-              {selectedFile ? selectedFile.name : "PNG y JPEG"}
-            </Typography>
+        {pendingFiles.length > 0 ? (
+          <Box sx={{ mb: 2, display: "flex", flexDirection: "column", gap: 1 }}>
+            {pendingFiles.map((file, index) => (
+              <Box
+                key={`${file.name}-${index}`}
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1,
+                  p: 1.25,
+                  borderRadius: 1.5,
+                  bgcolor: "background.default",
+                  border: "1px solid",
+                  borderColor: "divider",
+                }}
+              >
+                <ImageOutlinedIcon sx={{ color: "primary.main", fontSize: 18, flexShrink: 0 }} />
+                <Typography
+                  variant="caption"
+                  sx={{
+                    flexGrow: 1,
+                    fontWeight: 700,
+                    color: "text.primary",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {file.name}
+                </Typography>
+                <Chip
+                  label={`Img ${index + 1}`}
+                  size="small"
+                  sx={{ bgcolor: "primary.light", color: "primary.main", fontWeight: 700, fontSize: "0.65rem" }}
+                />
+                <IconButton
+                  size="small"
+                  onClick={() => removeFile(index)}
+                  sx={{ color: "text.secondary", p: 0.25 }}
+                >
+                  <CloseIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Box>
+            ))}
           </Box>
-        </Paper>
+        ) : null}
+
+        <Typography
+          variant="caption"
+          sx={{ color: "text.secondary", fontWeight: 600, display: "block" }}
+        >
+          Formatos: PNG y JPEG · Máximo {MAX_FILES} imágenes
+          {isAtLimit ? " · Límite alcanzado" : ` · ${MAX_FILES - pendingFiles.length} restante${MAX_FILES - pendingFiles.length === 1 ? "" : "s"}`}
+        </Typography>
       </DialogContent>
 
-      <DialogActions sx={{ p: 2, pt: 1 }}>
-        <Button onClick={onClose} variant="text" color="inherit">
+      <DialogActions sx={{ p: 2, pt: 1, gap: 1 }}>
+        <Button onClick={onClose} variant="text" color="inherit" disabled={isLoading}>
           Cancelar
+        </Button>
+        <Button
+          onClick={handleConfirm}
+          disabled={isLoading || pendingFiles.length === 0}
+          variant="contained"
+          startIcon={
+            isLoading
+              ? <CircularProgress size={16} color="inherit" />
+              : <CheckIcon />
+          }
+        >
+          {isLoading ? "Procesando..." : confirmLabel}
         </Button>
       </DialogActions>
 

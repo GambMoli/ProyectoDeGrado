@@ -5,16 +5,36 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from PIL import Image, ImageOps
+from PIL import Image
 
 from app.core.config import Settings
-from app.utils.expression_normalizer import (
-    extract_candidate_segment,
-    looks_like_structured_math,
-    normalize_text,
-)
 
 logger = logging.getLogger(__name__)
+
+_GEMINI_PROMPT = (
+    "Eres una herramienta de OCR matematico. Tu UNICA funcion es transcribir exactamente lo "
+    "que esta escrito en las imagenes. NO corrijas errores, NO completes pasos faltantes, NO "
+    "sugieras correcciones, NO agregues pasos que no esten en la imagen. Si el estudiante "
+    "cometio un error matematico, transcribelo tal como esta escrito.\n\n"
+    "Se te envia {n} imagen(es) con un ejercicio matematico resuelto por un estudiante. "
+    "Cada imagen puede contener uno o varios pasos del desarrollo.\n\n"
+    "Tu tarea:\n"
+    "1. Lee cada imagen en el orden dado.\n"
+    "2. Transcribe CADA paso en LaTeX, respetando el orden visual de arriba a abajo.\n"
+    "3. Transcribe EXACTAMENTE lo que ves, incluyendo errores.\n\n"
+    "Devuelve UNICAMENTE el LaTeX de todos los pasos en una sola linea, donde cada paso este "
+    "envuelto en el delimitador $$PASO$$ de esta forma: $$paso1$$ $$paso2$$ $$paso3$$ "
+    "Sin saltos de linea, sin explicaciones, sin bloques de codigo.\n\n"
+    "Ejemplo de respuesta:\n"
+    "$$\\int x^2 dx$$ $$= \\frac{{x^3}}{{3}} + C$$"
+)
+
+_GEMINI_MODELS = [
+    "gemini-3.1-flash-lite",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-flash",
+    "gemini-3-flash-preview",
+]
 
 
 @dataclass(slots=True)
@@ -34,9 +54,7 @@ class OCRService(ABC):
     def extract_text(
         self,
         *,
-        image_bytes: bytes,
-        filename: str,
-        content_type: str,
+        images: list[tuple[bytes, str, str]],
     ) -> OCRExtractionResult:
         raise NotImplementedError
 
@@ -47,119 +65,97 @@ class MockOCRService(OCRService):
     def extract_text(
         self,
         *,
-        image_bytes: bytes,
-        filename: str,
-        content_type: str,
+        images: list[tuple[bytes, str, str]],  # noqa: ARG002
     ) -> OCRExtractionResult:
         return OCRExtractionResult(
             success=False,
             text=None,
             provider=self.provider_name,
             error_message=(
-                "El OCR no esta configurado. Activa Tesseract o ingresa el "
+                "El OCR no esta configurado. Activa Gemini o ingresa el "
                 "ejercicio manualmente en el chat."
             ),
         )
 
 
-class TesseractOCRService(OCRService):
-    provider_name = "tesseract"
+def _is_quota_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return any(k in msg for k in ("quota", "rate", "429", "resource_exhausted", "too many"))
 
-    def __init__(self, language: str = "eng", tesseract_cmd: str | None = None) -> None:
-        self.language = language
-        self.tesseract_cmd = tesseract_cmd
+
+class GeminiOCRService(OCRService):
+    provider_name = "gemini"
+
+    def __init__(self, api_keys: list[str]) -> None:
+        from google import genai
+
+        self._clients = [genai.Client(api_key=k) for k in api_keys]
 
     def extract_text(
         self,
         *,
-        image_bytes: bytes,
-        filename: str,
-        content_type: str,
+        images: list[tuple[bytes, str, str]],
     ) -> OCRExtractionResult:
+        first_filename = images[0][1] if images else "image"
         try:
-            import pytesseract
-        except ImportError:
-            logger.warning("pytesseract is not installed; falling back to OCR failure.")
+            from google.genai import types
+
+            parts: list = [_GEMINI_PROMPT.format(n=len(images))]
+            for i, (image_bytes, _, _) in enumerate(images, start=1):
+                img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+                buf = io.BytesIO()
+                img.save(buf, format="PNG")
+                parts.append(f"Imagen {i}:")
+                parts.append(types.Part.from_bytes(data=buf.getvalue(), mime_type="image/png"))
+
+            last_error: Exception | None = None
+            for client_idx, client in enumerate(self._clients):
+                for model in _GEMINI_MODELS:
+                    try:
+                        response = client.models.generate_content(
+                            model=model,
+                            contents=parts,
+                        )
+                        raw = (response.text or "").strip()
+                        if raw:
+                            return OCRExtractionResult(
+                                success=True,
+                                text=raw,
+                                provider=self.provider_name,
+                                raw_text=raw,
+                                confidence=100.0,
+                            )
+                        return OCRExtractionResult(
+                            success=False,
+                            text=None,
+                            provider=self.provider_name,
+                            error_message=(
+                                "No pude leer el ejercicio de la imagen. "
+                                "Prueba con una foto mas nitida o escribe el enunciado manualmente."
+                            ),
+                        )
+                    except Exception as exc:
+                        last_error = exc
+                        if _is_quota_error(exc):
+                            logger.warning(
+                                "[GeminiOCR] key %d modelo %s: cuota agotada, rotando clave.",
+                                client_idx + 1, model,
+                            )
+                            break  # prueba la siguiente clave
+                        logger.warning("[GeminiOCR] key %d modelo %s fallo: %s", client_idx + 1, model, exc)
+
             return OCRExtractionResult(
                 success=False,
                 text=None,
                 provider=self.provider_name,
                 error_message=(
-                    "No se encontro la dependencia de OCR. "
-                    "Prueba con una foto mas nitida o escribe el ejercicio manualmente."
+                    f"Hubo un error en el servicio OCR: {last_error}. "
+                    "Intenta de nuevo o escribe el ejercicio manualmente."
                 ),
             )
 
-        if self.tesseract_cmd:
-            pytesseract.pytesseract.tesseract_cmd = self.tesseract_cmd
-
-        try:
-            image = Image.open(io.BytesIO(image_bytes))
-            image = ImageOps.exif_transpose(image).convert("L")
-            image = ImageOps.autocontrast(image)
-            image = ImageOps.posterize(image.convert("RGB"), 2).convert("L")
-            raw_text = pytesseract.image_to_string(
-                image,
-                lang=self.language,
-                config="--psm 6",
-            )
-            data = pytesseract.image_to_data(
-                image,
-                lang=self.language,
-                config="--psm 6",
-                output_type=pytesseract.Output.DICT,
-            )
-            cleaned_text = normalize_text(raw_text)
-            confidence = self._average_confidence(data)
-            candidate = extract_candidate_segment(cleaned_text)
-            if cleaned_text.strip():
-                if not looks_like_structured_math(candidate):
-                    return OCRExtractionResult(
-                        success=False,
-                        text=None,
-                        provider=self.provider_name,
-                        raw_text=raw_text,
-                        confidence=confidence,
-                        error_message=(
-                            "La imagen no se pudo leer como un ejercicio matematico con suficiente claridad. "
-                            "Intenta con una foto mas nitida, mejor encuadrada o escribe el ejercicio manualmente."
-                        ),
-                    )
-
-                if confidence is not None and confidence < 35:
-                    return OCRExtractionResult(
-                        success=False,
-                        text=None,
-                        provider=self.provider_name,
-                        raw_text=raw_text,
-                        confidence=confidence,
-                        error_message=(
-                            "La imagen se leyo con muy poca confianza. "
-                            "Prueba con mejor iluminacion, una foto mas recta o escribe el ejercicio manualmente."
-                        ),
-                    )
-
-                return OCRExtractionResult(
-                    success=True,
-                    text=cleaned_text,
-                    provider=self.provider_name,
-                    raw_text=raw_text,
-                    confidence=confidence,
-                )
-
-            return OCRExtractionResult(
-                success=False,
-                text=None,
-                provider=self.provider_name,
-                raw_text=raw_text,
-                confidence=confidence,
-                error_message=(
-                    "No pude leer el ejercicio de la imagen. "
-                    "Prueba con una foto mas nitida o escribe el enunciado manualmente."
-                ),
-            )
         except Exception as exc:
-            logger.warning("OCR extraction failed for %s: %s", filename, exc)
+            logger.warning("[GeminiOCR] error procesando %s: %s", first_filename, exc)
             return OCRExtractionResult(
                 success=False,
                 text=None,
@@ -170,27 +166,9 @@ class TesseractOCRService(OCRService):
                 ),
             )
 
-    @staticmethod
-    def _average_confidence(data: dict[str, list[str]]) -> float | None:
-        raw_confidences = data.get("conf", [])
-        values: list[float] = []
-        for raw_confidence in raw_confidences:
-            try:
-                value = float(raw_confidence)
-            except (TypeError, ValueError):
-                continue
-            if value >= 0:
-                values.append(value)
-        if not values:
-            return None
-        return sum(values) / len(values)
-
 
 def build_ocr_service(settings: Settings) -> OCRService:
-    provider = settings.ocr_provider.lower().strip()
-    if provider == "tesseract":
-        return TesseractOCRService(
-            language=settings.ocr_language,
-            tesseract_cmd=settings.tesseract_cmd,
-        )
-    return MockOCRService()
+    if not settings.gemini_api_keys:
+        logger.warning("GEMINI_API_KEYS no esta configurada; usando MockOCRService.")
+        return MockOCRService()
+    return GeminiOCRService(api_keys=settings.gemini_api_keys)

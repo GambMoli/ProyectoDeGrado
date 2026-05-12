@@ -1,5 +1,6 @@
 import { Box, Paper, Typography } from "@mui/material";
 import { useEffect, useRef } from "react";
+import { useLocation } from "react-router-dom";
 
 import { StatusBanner } from "../../components";
 import { MainLayout } from "../../layouts/MainLayout";
@@ -11,6 +12,8 @@ import { HistoryDrawer } from "./components/HistoryDrawer";
 import { useChatPage } from "./hooks/useChatPage";
 
 export function ChatPage() {
+  const location = useLocation();
+  const startNew = Boolean(location.state?.newConversation);
   const {
     activeConversation,
     activeConversationId,
@@ -21,28 +24,41 @@ export function ChatPage() {
     isConversationLoading,
     isHistoryLoading,
     isHistoryOpen,
+    isOcrLoading,
     isSubmitting,
+    pendingOcrText,
     selectedFile,
+    clearPendingOcrText,
     clearSelectedFile,
     closeAttachModal,
     closeHistory,
     handleComposerSubmit,
+    handleFileSelected,
     handleNewConversation,
     handleSelectConversation,
     openAttachModal,
     openHistory,
-    setSelectedFile,
-  } = useChatPage();
+  } = useChatPage({ startNew });
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const previousConversationIdRef = useRef<string | null>(null);
   const previousLastMessageIdRef = useRef<string | null>(null);
+  const wasSubmittingRef = useRef(false);
 
   const lastMessageId =
     activeConversation && activeConversation.messages.length > 0
       ? activeConversation.messages[activeConversation.messages.length - 1].id
       : null;
+  const openFormulaPanelTrigger = location.state?.openFormulaPanel ? location.key : undefined;
+
+  function scrollToBottom(behavior: ScrollBehavior = "smooth") {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior, block: "end" });
+      });
+    });
+  }
 
   useEffect(() => {
     if (isConversationLoading) {
@@ -52,19 +68,25 @@ export function ChatPage() {
     const conversationChanged = previousConversationIdRef.current !== activeConversation?.id;
     const lastMessageChanged = previousLastMessageIdRef.current !== lastMessageId;
 
-    if ((conversationChanged || lastMessageChanged) && messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({
-        behavior: "smooth",
-        block: "end",
-      });
+    if (conversationChanged) {
+      scrollToBottom("instant");
+    } else if (lastMessageChanged) {
+      scrollToBottom("smooth");
     }
 
     previousConversationIdRef.current = activeConversation?.id ?? null;
     previousLastMessageIdRef.current = lastMessageId;
   }, [activeConversation?.id, isConversationLoading, lastMessageId]);
 
+  useEffect(() => {
+    if (wasSubmittingRef.current && !isSubmitting) {
+      scrollToBottom("smooth");
+    }
+    wasSubmittingRef.current = isSubmitting;
+  }, [isSubmitting]);
+
   return (
-    <MainLayout onOpenHistory={openHistory} onOpenAttach={openAttachModal}>
+    <MainLayout onOpenHistory={openHistory} onOpenAttach={openAttachModal} onNewChat={handleNewConversation}>
       <Box
         sx={{
           display: "flex",
@@ -94,7 +116,6 @@ export function ChatPage() {
                 sx={{
                   flexGrow: 1,
                   overflowY: "auto",
-                  scrollBehavior: "smooth",
                   px: { xs: 2, md: 4 },
                   py: 3,
                   display: "flex",
@@ -131,10 +152,14 @@ export function ChatPage() {
             }}
           >
             <Composer
-              disabled={isSubmitting}
+              disabled={isSubmitting || isOcrLoading}
+              isOcrLoading={isOcrLoading}
+              openFormulaPanelTrigger={openFormulaPanelTrigger}
+              pendingText={pendingOcrText}
               selectedFile={selectedFile}
               onClearFile={clearSelectedFile}
               onOpenAttach={openAttachModal}
+              onPendingTextApplied={clearPendingOcrText}
               onSubmit={handleComposerSubmit}
             />
           </Box>
@@ -153,12 +178,11 @@ export function ChatPage() {
       />
 
       <AttachExerciseModal
+        isLoading={isOcrLoading}
         isOpen={isAttachModalOpen}
-        selectedFile={selectedFile}
         onClose={closeAttachModal}
-        onSelectFile={(file) => {
-          setSelectedFile(file);
-          closeAttachModal();
+        onConfirmFiles={(files) => {
+          void handleFileSelected(files);
         }}
       />
     </MainLayout>

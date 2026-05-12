@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import CloseIcon from "@mui/icons-material/Close";
@@ -16,13 +16,17 @@ import {
   Typography,
 } from "@mui/material";
 
-import { extractMathCandidateForPreview, MathFormula, plainMathToLatex } from "../../../components";
+import { extractMathCandidateForPreview, MathContent, MathFormula, plainMathToLatex } from "../../../components";
 
 interface ComposerProps {
   disabled: boolean;
+  isOcrLoading?: boolean;
+  openFormulaPanelTrigger?: string;
+  pendingText?: string | null;
   selectedFile: File | null;
   onClearFile: () => void;
   onOpenAttach: () => void;
+  onPendingTextApplied?: () => void;
   onSubmit: (message: string) => Promise<void>;
 }
 
@@ -37,17 +41,37 @@ const formulaSnippets = [
 
 export function Composer({
   disabled,
+  isOcrLoading,
+  openFormulaPanelTrigger,
+  pendingText,
   selectedFile,
   onClearFile,
   onOpenAttach,
+  onPendingTextApplied,
   onSubmit,
 }: ComposerProps) {
   const [message, setMessage] = useState("");
   const [isFormulaPanelOpen, setIsFormulaPanelOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
+  const isDisabled = disabled || Boolean(isOcrLoading);
+
+  useEffect(() => {
+    if (openFormulaPanelTrigger) {
+      setIsFormulaPanelOpen(true);
+    }
+  }, [openFormulaPanelTrigger]);
+
+  useEffect(() => {
+    if (pendingText != null) {
+      setMessage(pendingText);
+      onPendingTextApplied?.();
+      setTimeout(() => textareaRef.current?.focus(), 0);
+    }
+  }, [pendingText]);
+
   async function handleSubmit() {
-    if (disabled || (!message.trim() && !selectedFile)) {
+    if (isDisabled || (!message.trim() && !selectedFile)) {
       return;
     }
 
@@ -85,8 +109,10 @@ export function Composer({
     }, 0);
   }
 
-  const previewCandidate = extractMathCandidateForPreview(message);
+  const hasBlockMath = /\\\[[\s\S]*?\\\]/.test(message);
+  const previewCandidate = hasBlockMath ? null : extractMathCandidateForPreview(message);
   const previewLatex = previewCandidate ? plainMathToLatex(previewCandidate) : null;
+  const showPreview = hasBlockMath || Boolean(previewLatex);
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
@@ -174,7 +200,7 @@ export function Composer({
         </Box>
       ) : null}
 
-      {previewLatex ? (
+      {showPreview ? (
         <Paper sx={{ p: 2.5, bgcolor: "background.default" }}>
           <Typography
             variant="caption"
@@ -190,7 +216,11 @@ export function Composer({
             Vista previa matematica
           </Typography>
           <Box sx={{ overflowX: "auto" }}>
-            <MathFormula expression={previewLatex} displayMode />
+            {hasBlockMath ? (
+              <MathContent content={message} />
+            ) : (
+              <MathFormula expression={previewLatex!} displayMode />
+            )}
           </Box>
         </Paper>
       ) : null}
@@ -211,7 +241,7 @@ export function Composer({
           maxRows={6}
           placeholder="Escribe tu consulta matematica aqui..."
           value={message}
-          disabled={disabled}
+          disabled={isDisabled}
           onChange={(event) => setMessage(event.target.value)}
           onKeyDown={handleKeyDown}
           inputRef={textareaRef}
@@ -225,7 +255,7 @@ export function Composer({
           <span>
             <IconButton
               onClick={() => void handleSubmit()}
-              disabled={disabled || (!message.trim() && !selectedFile)}
+              disabled={isDisabled || (!message.trim() && !selectedFile)}
               color="primary"
               sx={{
                 bgcolor: "primary.main",

@@ -28,8 +28,7 @@ services:
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-deepseek-r1:8b}
       OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-120}
-      OCR_PROVIDER: ${OCR_PROVIDER:-tesseract}
-      OCR_LANGUAGE: eng
+      GEMINI_API_KEYS: ${GEMINI_API_KEYS}
       KNOWLEDGE_DATASETS_DIR: ${KNOWLEDGE_DATASETS_DIR:-/knowledge/datasets}
       RAG_TOP_K: ${RAG_TOP_K:-4}
     ports:

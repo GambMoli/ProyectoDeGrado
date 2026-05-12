@@ -52,7 +52,7 @@ class AuthService:
         if not user or not verify_password(payload.password, user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Correo o contrasena invalidos.",
+                detail="Correo o contraseña inválidos.",
             )
 
         session = self._create_session(db=db, user=user)
@@ -69,7 +69,7 @@ class AuthService:
         if not session:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Sesion invalida o expirada.",
+                detail="Sesión inválida o expirada.",
             )
 
         if self._normalize_datetime(session.expires_at) <= utc_now():
@@ -78,14 +78,14 @@ class AuthService:
             db.flush()
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="La sesion ha expirado. Inicia sesion nuevamente.",
+                detail="La sesión ha expirado. Inicia sesión nuevamente.",
             )
 
         user = session.user
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="No se encontro el usuario asociado a la sesion.",
+                detail="No se encontró el usuario asociado a la sesión.",
             )
         return user
 
@@ -120,13 +120,13 @@ class AuthService:
         if not expected_code:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="El registro de profesores no esta habilitado.",
+                detail="El registro de profesores no está habilitado.",
             )
 
         if (teacher_access_code or "").strip() != expected_code:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Codigo de acceso para profesor invalido.",
+                detail="Código de acceso para profesor inválido.",
             )
 
     @staticmethod
