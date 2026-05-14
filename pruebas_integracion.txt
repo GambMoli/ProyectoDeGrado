@@ -1,0 +1,1403 @@
+================================================================================
+  PRUEBAS DE INTEGRACION — ProyectoDeGrado
+================================================================================
+
+
+================================================================================
+  ====Script Test====
+  Archivo: run_integration_tests.ps1
+================================================================================
+
+# run_integration_tests.ps1 -- Pruebas de integracion agrupadas por escenario
+
+$ROOT    = $PSScriptRoot
+$BACKEND = Join-Path $ROOT "backend"
+$FRONTEND= Join-Path $ROOT "frontend"
+$PYTHON  = Join-Path $BACKEND ".venv\Scripts\python.exe"
+
+$INT_TESTS = @(
+    "tests/test_auth_service.py",
+    "tests/test_tutor_agent_service.py",
+    "tests/test_conversation_orchestrator_service.py",
+    "tests/test_conversation_planner_service.py",
+    "tests/test_math_services.py",
+    "tests/test_practice_service.py",
+    "tests/test_knowledge_base_service.py",
+    "tests/test_response_composer_service.py",
+    "tests/test_reports_service.py"
+)
+
+$FILTER_FLUJO    = "not (falls_back or times_out or revokes or requires_ollama or returns_none or missing or requires_valid or discards)"
+$FILTER_ERROR    = "falls_back or times_out or revokes or requires_ollama"
+$FILTER_INVALIDO = "returns_none or missing or requires_valid or discards"
+
+$failed = $false
+
+function Write-Header($text) {
+    Write-Host ""
+    Write-Host ("=" * 56) -ForegroundColor Cyan
+    Write-Host ("  " + $text) -ForegroundColor Cyan
+    Write-Host ("=" * 56) -ForegroundColor Cyan
+}
+
+function Write-CIBlock($ids) {
+    Write-Host "  IDs: $ids" -ForegroundColor DarkGray
+}
+
+function Run-Pytest($label, $ids, $filter, $files) {
+    Write-Host ""
+    Write-Host "-------- $label --------" -ForegroundColor Yellow
+    Write-CIBlock $ids
+    Push-Location $BACKEND
+    & $PYTHON -m pytest @files -k $filter -v --tb=short --no-header -q 2>&1
+    if ($LASTEXITCODE -ne 0) { $script:failed = $true }
+    Pop-Location
+}
+
+function Run-Vitest($label, $ids, $script) {
+    Write-Host ""
+    Write-Host "-------- $label --------" -ForegroundColor Yellow
+    Write-CIBlock $ids
+    Push-Location $FRONTEND
+    & pnpm run $script 2>&1
+    if ($LASTEXITCODE -ne 0) { $script:failed = $true }
+    Pop-Location
+}
+
+Write-Header "BACKEND -- Integracion (pytest)"
+
+if (-not (Test-Path $PYTHON)) {
+    Write-Host "ERROR: venv no encontrado en $PYTHON" -ForegroundColor Red
+    Write-Host "Ejecuta: cd backend; python -m venv .venv; .venv\Scripts\pip install -r requirements.txt" -ForegroundColor Yellow
+    $failed = $true
+} else {
+    Run-Pytest "Flujo Correcto"   "CI-01 CI-02 CI-04 CI-06 CI-07 CI-12 CI-14 CI-15 CI-17 CI-18 CI-19 CI-20" $FILTER_FLUJO    $INT_TESTS
+    Run-Pytest "Error Controlado" "CI-05 CI-08 CI-16"                                                        $FILTER_ERROR    $INT_TESTS
+    Run-Pytest "Datos Invalidos"  "CI-03 CI-13 CI-21"                                                        $FILTER_INVALIDO $INT_TESTS
+}
+
+Write-Header "FRONTEND -- Integracion (vitest)"
+
+$pnpm = Get-Command pnpm -ErrorAction SilentlyContinue
+if (-not $pnpm) {
+    Write-Host "ERROR: pnpm no encontrado." -ForegroundColor Red
+    $failed = $true
+} else {
+    Run-Vitest "Flujo Correcto"   "CI-22 CI-23"  "test:normal"
+    Run-Vitest "Error Controlado" "CI-22"         "test:error"
+    Run-Vitest "Datos Invalidos"  "CI-03 CI-22"   "test:limite"
+}
+
+Write-Header "COBERTURA -- IDs sin test dedicado"
+Write-Host "  CI-09  OCR imagen valida - GeminiOCRService" -ForegroundColor DarkYellow
+Write-Host "  CI-10  Pipeline OCR - MathParser - Solver"   -ForegroundColor DarkYellow
+Write-Host "  CI-11  Rotacion de claves Gemini agotadas"   -ForegroundColor DarkYellow
+Write-Host "  CI-24  Acceso cruzado entre usuarios (403/404)" -ForegroundColor DarkYellow
+Write-Host "  Estos IDs requieren un archivo de prueba nuevo." -ForegroundColor DarkYellow
+
+Write-Header "RESUMEN"
+if (-not $failed) {
+    Write-Host "  Todas las pruebas de integracion: PASSED" -ForegroundColor Green
+} else {
+    Write-Host "  Algunas pruebas de integracion:   FAILED" -ForegroundColor Red
+}
+Write-Host ""
+if ($failed) { exit 1 }
+exit 0
+
+
+================================================================================
+  ====Backend Tests====
+================================================================================
+
+--------------------------------------------------------------------------------
+  Archivo: tests/test_auth_service.py
+  IDs: CI-01, CI-02, CI-03, CI-04, CI-05
+--------------------------------------------------------------------------------
+
+from __future__ import annotations
+
+from types import SimpleNamespace
+
+import pytest
+from fastapi import HTTPException
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from app.models import Base, User
+from app.schemas.auth import LoginRequest, RegisterRequest
+from app.services.auth_service import AuthService
+
+
+def build_session() -> Session:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    return sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)()
+
+
+def build_service(**overrides) -> AuthService:
+    settings = SimpleNamespace(
+        auth_session_ttl_hours=24,
+        teacher_access_code="teacher-secret",
+        **overrides,
+    )
+    return AuthService(settings=settings)
+
+
+def test_register_student_creates_account_and_session() -> None:
+    db = build_session()
+    service = build_service()
+
+    result = service.register(
+        db=db,
+        payload=RegisterRequest(
+            display_name="Ana Martinez",
+            email="ana@universidad.edu",
+            password="Segura123",
+            role="student",
+        ),
+    )
+
+    assert result.user.email == "ana@universidad.edu"
+    assert result.user.role == "student"
+    assert result.access_token
+    assert db.query(User).count() == 1
+
+
+def test_register_teacher_requires_valid_access_code() -> None:
+    db = build_session()
+    service = build_service()
+
+    with pytest.raises(HTTPException) as exc_info:
+        service.register(
+            db=db,
+            payload=RegisterRequest(
+                display_name="Docente Uno",
+                email="docente@universidad.edu",
+                password="Segura123",
+                role="teacher",
+                teacher_access_code="incorrecto",
+            ),
+        )
+
+    assert exc_info.value.status_code == 403
+
+
+def test_login_returns_new_session_for_existing_user() -> None:
+    db = build_session()
+    service = build_service()
+    service.register(
+        db=db,
+        payload=RegisterRequest(
+            display_name="Carlos Ramirez",
+            email="carlos@universidad.edu",
+            password="Segura123",
+            role="student",
+        ),
+    )
+    db.commit()
+
+    result = service.login(
+        db=db,
+        payload=LoginRequest(email="carlos@universidad.edu", password="Segura123"),
+    )
+
+    assert result.user.display_name == "Carlos Ramirez"
+    assert result.access_token
+
+
+def test_get_user_from_token_returns_authenticated_user() -> None:
+    db = build_session()
+    service = build_service()
+    response = service.register(
+        db=db,
+        payload=RegisterRequest(
+            display_name="Laura Gomez",
+            email="laura@universidad.edu",
+            password="Segura123",
+            role="student",
+        ),
+    )
+    db.commit()
+
+    user = service.get_user_from_token(db=db, token=response.access_token)
+
+    assert user.email == "laura@universidad.edu"
+
+
+def test_logout_revokes_session() -> None:
+    db = build_session()
+    service = build_service()
+    response = service.register(
+        db=db,
+        payload=RegisterRequest(
+            display_name="Profesor Uno",
+            email="profe@universidad.edu",
+            password="Segura123",
+            role="teacher",
+            teacher_access_code="teacher-secret",
+        ),
+    )
+    db.commit()
+
+    service.logout(db=db, token=response.access_token)
+    db.commit()
+
+    with pytest.raises(HTTPException) as exc_info:
+        service.get_user_from_token(db=db, token=response.access_token)
+
+    assert exc_info.value.status_code == 401
+
+
+--------------------------------------------------------------------------------
+  Archivo: tests/test_math_services.py
+  IDs: CI-12, CI-13
+--------------------------------------------------------------------------------
+
+from app.schemas.enums import ProblemType
+from app.services.math_parser_service import MathParserService
+from app.services.sympy_solver_service import SymPySolverService
+
+
+def test_parser_detects_derivative_and_solver_resolves_it() -> None:
+    parser = MathParserService()
+    solver = SymPySolverService()
+
+    parsed = parser.parse("Explicame paso a paso esta derivada: derivada de x^3")
+    solved = solver.solve(parsed)
+
+    assert parsed.problem_type == ProblemType.DERIVATIVE
+    assert parsed.expression == "x^3"
+    assert solved.final_result == "3*x**2"
+
+
+def test_parser_detects_integral_and_solver_resolves_it() -> None:
+    parser = MathParserService()
+    solver = SymPySolverService()
+
+    parsed = parser.parse("Integral de x^2 dx")
+    solved = solver.solve(parsed)
+
+    assert parsed.problem_type == ProblemType.INTEGRAL
+    assert solved.final_result == "x**3/3"
+
+
+def test_parser_detects_unicode_integral_symbol() -> None:
+    parser = MathParserService()
+    solver = SymPySolverService()
+
+    parsed = parser.parse("integral x^2 dx")
+    solved = solver.solve(parsed)
+
+    assert parsed.problem_type == ProblemType.INTEGRAL
+    assert solved.final_result == "x**3/3"
+
+
+def test_parser_detects_equation_and_solver_resolves_it() -> None:
+    parser = MathParserService()
+    solver = SymPySolverService()
+
+    parsed = parser.parse("Resuelve 2*x + 3 = 7")
+    solved = solver.solve(parsed)
+
+    assert parsed.problem_type == ProblemType.EQUATION
+    assert solved.final_result == "x = 2"
+
+
+def test_parser_detects_limit_with_textual_context_and_cleans_expression() -> None:
+    parser = MathParserService()
+    solver = SymPySolverService()
+
+    parsed = parser.parse("Resuelve el limite cuando x tiende a 0 de sin(x)/x^5")
+    solved = solver.solve(parsed)
+
+    assert parsed.problem_type == ProblemType.LIMIT
+    assert parsed.expression == "sin(x)/x^5"
+    assert parsed.variable == "x"
+    assert parsed.limit_point == "0"
+    assert solved.final_result == "oo"
+
+
+def test_parser_detects_limit_without_literal_keyword_if_context_is_clear() -> None:
+    parser = MathParserService()
+    solver = SymPySolverService()
+
+    parsed = parser.parse("Resuelve 3 sin(x) / x^5 cuando x tiende a 0")
+    solved = solver.solve(parsed)
+
+    assert parsed.problem_type == ProblemType.LIMIT
+    assert parsed.expression == "3 sin(x) / x^5"
+    assert parsed.variable == "x"
+    assert parsed.limit_point == "0"
+    assert solved.final_result == "oo"
+
+
+def test_parser_prefers_math_line_from_multiline_limit_prompt() -> None:
+    parser = MathParserService()
+    solver = SymPySolverService()
+
+    parsed = parser.parse("Resuelve el limite cuando x tiende a 0:\nsin(x)/x^5")
+    solved = solver.solve(parsed)
+
+    assert parsed.problem_type == ProblemType.LIMIT
+    assert parsed.expression == "sin(x)/x^5"
+    assert parsed.limit_point == "0"
+    assert solved.final_result == "oo"
+
+
+def test_parser_discards_ocr_like_instruction_letters_before_limit_expression() -> None:
+    parser = MathParserService()
+    solver = SymPySolverService()
+
+    parsed = parser.parse("R l s u v e 3 sin(x) / x^5 cuando x tiende a 0")
+    solved = solver.solve(parsed)
+
+    assert parsed.problem_type == ProblemType.LIMIT
+    assert parsed.expression == "3 sin(x) / x^5"
+    assert parsed.limit_point == "0"
+    assert solved.final_result == "oo"
+
+
+--------------------------------------------------------------------------------
+  Archivo: tests/test_practice_service.py
+  IDs: CI-14, CI-15, CI-16
+--------------------------------------------------------------------------------
+
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from app.services.knowledge_base_service import KnowledgeBaseService
+from app.services.math_parser_service import MathParserService
+from app.services.ollama_client import OllamaClientError
+from app.services.practice_service import PracticeService
+from app.services.sympy_solver_service import SymPySolverService
+
+DATASETS_DIR = Path("/knowledge/datasets")
+if not DATASETS_DIR.exists():
+    DATASETS_DIR = Path(__file__).resolve().parents[2] / "knowledge" / "datasets"
+
+
+class FakeOllamaClient:
+    def generate(self, *, system_prompt: str, prompt: str, temperature: float = 0.2) -> str:
+        prompt_lower = prompt.lower()
+        if "Devuelves solo JSON valido" in system_prompt and "generador interno de practica matematica" in system_prompt:
+            if "serie de taylor" in prompt_lower:
+                return (
+                    '{"mode":"taylor","function_expr":"sin(x)","center":"0","order":4,'
+                    '"exercise_text":"Construye el polinomio de Taylor de orden 4 de sin(x) alrededor de x = 0.",'
+                    '"hint":"Alterna derivadas de sin y cos, y conserva solo hasta grado 4."}'
+                )
+            if "biseccion" in prompt_lower:
+                return (
+                    '{"exercise_text":"Explica el metodo de biseccion y menciona una condicion necesaria para aplicarlo.",'
+                    '"expected_answer":"Se necesita un intervalo con cambio de signo y continuidad para aplicar biseccion.",'
+                    '"hint":"Piensa en cambio de signo y continuidad.",'
+                    '"rubric":"Debe mencionar intervalo con cambio de signo y continuidad.",'
+                    '"keywords":["intervalo","signo","continuidad","biseccion"]}'
+                )
+            if "objetivo matematico:" in prompt_lower and "derivadas" in prompt_lower:
+                return (
+                    '{"mode":"symbolic","raw_input":"derivada de 5*x^2 - 4*x + 1",'
+                    '"exercise_text":"Deriva la funcion f(x) = 5*x^2 - 4*x + 1.",'
+                    '"hint":"Aplica la regla de la potencia termino a termino."}'
+                )
+            return (
+                '{"exercise_text":"Explica el tema recuperado y su utilidad.",'
+                '"expected_answer":"Respuesta breve sobre el tema.",'
+                '"hint":"Describe que es y para que sirve.",'
+                '"rubric":"Debe explicar la idea central.",'
+                '"keywords":["tema","utilidad"]}'
+            )
+        if "Eres un tutor matematico cercano y preciso." in system_prompt:
+            return "Hay un error en tu respuesta. Revisa la pista y vuelve a intentarlo."
+        if "evaluador interno de practica matematica" in system_prompt:
+            return '{"is_correct": false, "feedback": "La respuesta aun no cubre la idea principal."}'
+        return "Salida de prueba de Ollama."
+
+
+class TimeoutFeedbackOllamaClient(FakeOllamaClient):
+    def generate(self, *, system_prompt: str, prompt: str, temperature: float = 0.2) -> str:
+        if "Eres un tutor matematico cercano y preciso." in system_prompt:
+            raise OllamaClientError("timeout")
+        return super().generate(system_prompt=system_prompt, prompt=prompt, temperature=temperature)
+
+
+class SemanticStrategyOllamaClient(FakeOllamaClient):
+    def generate(self, *, system_prompt: str, prompt: str, temperature: float = 0.2) -> str:
+        if "planner interno de practica matematica" in system_prompt:
+            return '{"topic":"integral","generator_mode":"symbolic","reason":"semantic_request"}'
+        prompt_lower = prompt.lower()
+        if "generador interno de practica matematica" in system_prompt and "objetivo matematico:" in prompt_lower and "integrales" in prompt_lower:
+            return (
+                '{"mode":"symbolic","raw_input":"integral de x^2 + 1 dx",'
+                '"exercise_text":"Calcula la integral indefinida de la funcion.",'
+                '"hint":"Integra termino a termino y recuerda la constante de integracion."}'
+            )
+        return super().generate(system_prompt=system_prompt, prompt=prompt, temperature=temperature)
+
+
+def build_practice_service() -> PracticeService:
+    return PracticeService(
+        settings=SimpleNamespace(),
+        parser_service=MathParserService(),
+        solver_service=SymPySolverService(),
+        ollama_client=FakeOllamaClient(),
+        knowledge_base_service=KnowledgeBaseService(DATASETS_DIR),
+    )
+
+
+def test_generate_derivative_practice_creates_pending_state() -> None:
+    service = build_practice_service()
+
+    generated = service.generate_practice("Proponme un ejercicio de derivadas")
+
+    assert "Calcula la derivada de la funcion" in generated.text
+    assert generated.state["pending_practice"]["expected_answer"] == "10*x - 4"
+    assert generated.state["practice_history"]
+
+
+def test_generate_practice_can_use_semantic_strategy_from_llm() -> None:
+    service = PracticeService(
+        settings=SimpleNamespace(),
+        parser_service=MathParserService(),
+        solver_service=SymPySolverService(),
+        ollama_client=SemanticStrategyOllamaClient(),
+        knowledge_base_service=KnowledgeBaseService(DATASETS_DIR),
+    )
+
+    generated = service.generate_practice("Quiero algo de integracion por partes")
+
+    assert generated.state["pending_practice"]["topic"] == "integral"
+    assert "\\int" in generated.exercise_text
+
+
+def test_generate_taylor_practice_uses_requested_topic() -> None:
+    service = build_practice_service()
+
+    generated = service.generate_practice("Dame un ejercicio de la serie de Taylor")
+
+    assert "Taylor" in generated.text
+    assert generated.state["pending_practice"]["topic"] == "serie_de_taylor"
+    assert generated.state["pending_practice"]["expected_answer"] == "-x**3/6 + x"
+
+
+def test_generate_bisection_practice_uses_corpus_instead_of_derivative_default() -> None:
+    service = build_practice_service()
+
+    generated = service.generate_practice("Ponme un ejercicio de biseccion")
+
+    assert "biseccion" in generated.text.lower()
+    assert generated.state["pending_practice"]["topic"] == "biseccion"
+    assert generated.state["pending_practice"]["grading_mode"] == "llm_rubric"
+
+
+def test_grade_correct_practice_attempt() -> None:
+    service = build_practice_service()
+    generated = service.generate_practice("Proponme un ejercicio de derivadas")
+
+    graded = service.grade_attempt(
+        pending_practice=generated.state["pending_practice"],
+        student_message="El resultado es 10x-4",
+    )
+
+    assert graded.is_correct is True
+    assert "pending_practice" not in graded.next_state
+    assert graded.next_state["last_practice_context"]["topic"] == "derivative"
+    assert graded.next_state["last_practice_context"]["last_outcome"] == "correct"
+    assert graded.next_state["practice_history"]
+
+
+def test_grade_incorrect_practice_attempt_keeps_state() -> None:
+    service = build_practice_service()
+    generated = service.generate_practice("Proponme un ejercicio de derivadas")
+
+    graded = service.grade_attempt(
+        pending_practice=generated.state["pending_practice"],
+        student_message="El resultado es 5x+2",
+    )
+
+    assert graded.is_correct is False
+    assert "pending_practice" in graded.next_state
+
+
+def test_generate_practice_reuses_recent_topic_for_continuation_requests() -> None:
+    service = build_practice_service()
+    generated = service.generate_practice("Proponme un ejercicio de derivadas")
+    graded = service.grade_attempt(
+        pending_practice=generated.state["pending_practice"],
+        student_message="El resultado es 10x-4",
+    )
+
+    follow_up = service.generate_practice("Ponme otro", current_state=graded.next_state)
+
+    assert follow_up.state["pending_practice"]["topic"] == "derivative"
+
+
+def test_integral_practice_accepts_equivalent_answer_with_constant() -> None:
+    service = build_practice_service()
+
+    pending_practice = {
+        "problem_type": "integral",
+        "expected_answer": "x**3/3 + 2*x**2 + x",
+        "exercise_text": "Resuelve esta integral.",
+        "hint": "Integra termino a termino.",
+        "practice_history": [],
+        "attempts": 0,
+    }
+
+    graded = service.grade_attempt(
+        pending_practice=pending_practice,
+        student_message="x^3/3 + 2x^2 + x + C",
+    )
+
+    assert graded.is_correct is True
+
+
+def test_grade_incorrect_practice_attempt_uses_fallback_when_ollama_times_out() -> None:
+    service = PracticeService(
+        settings=SimpleNamespace(),
+        parser_service=MathParserService(),
+        solver_service=SymPySolverService(),
+        ollama_client=TimeoutFeedbackOllamaClient(),
+        knowledge_base_service=KnowledgeBaseService(DATASETS_DIR),
+    )
+    generated = service.generate_practice("Proponme un ejercicio de derivadas")
+
+    graded = service.grade_attempt(
+        pending_practice=generated.state["pending_practice"],
+        student_message="El resultado es 5x+2",
+    )
+
+    assert graded.is_correct is False
+    assert "No coincide todavia" in graded.text
+
+
+def test_practice_service_requires_ollama() -> None:
+    service = PracticeService(
+        settings=SimpleNamespace(),
+        parser_service=MathParserService(),
+        solver_service=SymPySolverService(),
+        ollama_client=None,
+        knowledge_base_service=KnowledgeBaseService(DATASETS_DIR),
+    )
+
+    with pytest.raises(RuntimeError, match="OllamaClient no esta configurado"):
+        service.generate_practice("Proponme un ejercicio de derivadas")
+
+
+--------------------------------------------------------------------------------
+  Archivo: tests/test_knowledge_base_service.py
+  IDs: CI-17
+--------------------------------------------------------------------------------
+
+from pathlib import Path
+
+import pytest
+
+from app.services.knowledge_base_service import KnowledgeBaseService
+
+DATASETS_DIR = Path(__file__).resolve().parents[2] / "knowledge" / "datasets"
+
+
+def test_search_finds_biseccion_topic() -> None:
+    service = KnowledgeBaseService(DATASETS_DIR)
+
+    results = service.search("Explicame el metodo de biseccion", limit=3)
+
+    assert results
+    assert results[0].document.course == "metodos_numericos"
+    assert results[0].document.topic == "biseccion"
+
+
+def test_search_finds_continuidad_topic() -> None:
+    service = KnowledgeBaseService(DATASETS_DIR)
+
+    results = service.search("Que es la continuidad de funciones en calculo 1", limit=3)
+
+    assert results
+    assert results[0].document.course == "calculo_1"
+    assert results[0].document.topic == "continuidad_de_funciones"
+
+
+def test_search_finds_gauss_seidel_topic() -> None:
+    service = KnowledgeBaseService(DATASETS_DIR)
+
+    results = service.search("Explicame gauss seidel para sistemas lineales", limit=3)
+
+    assert results
+    assert results[0].document.course == "metodos_numericos"
+    assert results[0].document.topic == "gauss_seidel"
+
+
+@pytest.mark.parametrize(
+    ("query", "expected_topic"),
+    [
+        ("Que es crank nicolson", "crank_nicolson"),
+        ("Explicame fft", "transformada_rapida_de_fourier"),
+        ("Busco info sobre programacion lineal", "programacion_lineal"),
+        ("Como funciona la busqueda por incrementos", "busqueda_por_incrementos"),
+    ],
+)
+def test_search_finds_recent_chapra_topics(query: str, expected_topic: str) -> None:
+    service = KnowledgeBaseService(DATASETS_DIR)
+
+    results = service.search(query, limit=3)
+
+    assert results
+    assert results[0].document.course == "metodos_numericos"
+    assert results[0].document.topic == expected_topic
+
+
+--------------------------------------------------------------------------------
+  Archivo: tests/test_response_composer_service.py
+  IDs: CI-18
+--------------------------------------------------------------------------------
+
+from types import SimpleNamespace
+
+from app.services.response_composer_service import ResponseComposerService
+
+
+class GoodComposerOllamaClient:
+    def generate(self, *, system_prompt: str, prompt: str, temperature: float = 0.2) -> str:
+        return (
+            "La derivada mide la tasa de cambio instantanea de una funcion. "
+            "Para practicar, trabaja literalmente este ejercicio: "
+            "Deriva la funcion f(x) = 4*x^3 - x + 6. "
+            "Si te atoras, usa la regla de la potencia termino a termino."
+        )
+
+
+class LooseComposerOllamaClient:
+    def generate(self, *, system_prompt: str, prompt: str, temperature: float = 0.2) -> str:
+        return "La derivada mide el cambio. Ahora intenta una funcion polinomica parecida."
+
+
+def test_composer_uses_ollama_when_it_keeps_exact_exercise() -> None:
+    service = ResponseComposerService(
+        settings=SimpleNamespace(),
+        ollama_client=GoodComposerOllamaClient(),
+    )
+
+    composed = service.compose_guidance(
+        user_message="Dime que sabes de derivadas y proponme un ejercicio",
+        conversation_context=[],
+        theory_text="La derivada mide la tasa de cambio instantanea de una funcion.",
+        exercise_text="Deriva la funcion f(x) = 4*x^3 - x + 6.",
+        hint="Aplica la regla de la potencia termino a termino.",
+    )
+
+    assert composed.source == "ollama_composer"
+    assert "Deriva la funcion f(x) = 4*x^3 - x + 6." in composed.text
+
+
+def test_composer_falls_back_when_llm_does_not_keep_exact_exercise() -> None:
+    service = ResponseComposerService(
+        settings=SimpleNamespace(),
+        ollama_client=LooseComposerOllamaClient(),
+    )
+
+    composed = service.compose_guidance(
+        user_message="Dime que sabes de derivadas y proponme un ejercicio",
+        conversation_context=[],
+        theory_text="La derivada mide la tasa de cambio instantanea de una funcion.",
+        exercise_text="Deriva la funcion f(x) = 4*x^3 - x + 6.",
+        hint="Aplica la regla de la potencia termino a termino.",
+    )
+
+    assert composed.source == "fallback_exact_exercise"
+    assert "Deriva la funcion f(x) = 4*x^3 - x + 6." in composed.text
+
+
+--------------------------------------------------------------------------------
+  Archivo: tests/test_reports_service.py
+  IDs: CI-19, CI-20, CI-21
+--------------------------------------------------------------------------------
+
+from __future__ import annotations
+
+from datetime import date, datetime, timezone
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from app.models import Base, Conversation, Exercise, Message, TopicMetricEvent, User
+from app.schemas.report import (
+    ReportsOverviewOut,
+    StudentReportSummaryOut,
+    StudentWeeklyActivityOut,
+    TopicReportSummaryOut,
+    TopicTrendOut,
+)
+from app.services.reports_service import ReportsService
+
+
+def build_session() -> Session:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    return sessionmaker(bind=engine)()
+
+
+def seed_data(db: Session) -> tuple[User, User]:
+    ana = User(id="user-ana", display_name="Ana Martinez", is_anonymous=False)
+    carlos = User(id="user-carlos", display_name="Carlos Ramirez", is_anonymous=True)
+    db.add_all([ana, carlos])
+
+    ana_conversation_1 = Conversation(
+        id="conv-ana-1", user_id=ana.id, title="Integrales",
+        created_at=datetime(2026, 4, 1, 14, 0, tzinfo=timezone.utc),
+        updated_at=datetime(2026, 4, 3, 18, 0, tzinfo=timezone.utc), agent_state={},
+    )
+    ana_conversation_2 = Conversation(
+        id="conv-ana-2", user_id=ana.id, title="Derivadas",
+        created_at=datetime(2026, 4, 9, 15, 0, tzinfo=timezone.utc),
+        updated_at=datetime(2026, 4, 10, 12, 0, tzinfo=timezone.utc), agent_state={},
+    )
+    carlos_conversation = Conversation(
+        id="conv-carlos-1", user_id=carlos.id, title="Limites",
+        created_at=datetime(2026, 4, 8, 10, 0, tzinfo=timezone.utc),
+        updated_at=datetime(2026, 4, 8, 10, 30, tzinfo=timezone.utc), agent_state={},
+    )
+    db.add_all([ana_conversation_1, ana_conversation_2, carlos_conversation])
+
+    messages = [
+        Message(id="msg-ana-1", conversation_id="conv-ana-1", role="user",
+                content="Necesito ayuda con integrales",
+                created_at=datetime(2026, 4, 1, 14, 5, tzinfo=timezone.utc)),
+        Message(id="msg-ana-2", conversation_id="conv-ana-1", role="assistant",
+                content="Vamos con un ejercicio",
+                created_at=datetime(2026, 4, 1, 14, 6, tzinfo=timezone.utc)),
+        Message(id="msg-ana-3", conversation_id="conv-ana-1", role="user",
+                content="No entendi el paso 2",
+                created_at=datetime(2026, 4, 3, 18, 0, tzinfo=timezone.utc)),
+        Message(id="msg-ana-4", conversation_id="conv-ana-2", role="user",
+                content="Ahora quiero practicar derivadas",
+                created_at=datetime(2026, 4, 10, 12, 0, tzinfo=timezone.utc)),
+        Message(id="msg-carlos-1", conversation_id="conv-carlos-1", role="user",
+                content="Explicame limites",
+                created_at=datetime(2026, 4, 8, 10, 5, tzinfo=timezone.utc)),
+    ]
+    db.add_all(messages)
+
+    exercises = [
+        Exercise(id="ex-ana-1", conversation_id="conv-ana-1",
+                 user_message_id="msg-ana-1", assistant_message_id="msg-ana-2",
+                 source_type="text", raw_input="integral",
+                 detected_problem_type="integral", status="solved",
+                 created_at=datetime(2026, 4, 1, 14, 6, tzinfo=timezone.utc)),
+        Exercise(id="ex-ana-2", conversation_id="conv-ana-2",
+                 user_message_id="msg-ana-4", assistant_message_id=None,
+                 source_type="text", raw_input="derivative",
+                 detected_problem_type="derivative", status="solver_failed",
+                 created_at=datetime(2026, 4, 10, 12, 1, tzinfo=timezone.utc)),
+        Exercise(id="ex-carlos-1", conversation_id="conv-carlos-1",
+                 user_message_id="msg-carlos-1", assistant_message_id=None,
+                 source_type="text", raw_input="limit",
+                 detected_problem_type="limit", status="parse_failed",
+                 created_at=datetime(2026, 4, 8, 10, 6, tzinfo=timezone.utc)),
+    ]
+    db.add_all(exercises)
+
+    topic_events = [
+        TopicMetricEvent(id="event-integral-question-current", user_id=ana.id,
+                         conversation_id="conv-ana-1", topic="integral",
+                         interaction_type="question",
+                         created_at=datetime(2026, 4, 1, 14, 5, tzinfo=timezone.utc)),
+        TopicMetricEvent(id="event-integral-generated-current", user_id=ana.id,
+                         conversation_id="conv-ana-1", topic="integral",
+                         interaction_type="exercise_generated",
+                         created_at=datetime(2026, 4, 1, 14, 6, tzinfo=timezone.utc)),
+        TopicMetricEvent(id="event-derivative-question-current", user_id=ana.id,
+                         conversation_id="conv-ana-2", topic="derivative",
+                         interaction_type="question",
+                         created_at=datetime(2026, 4, 10, 12, 0, tzinfo=timezone.utc)),
+        TopicMetricEvent(id="event-derivative-generated-current", user_id=ana.id,
+                         conversation_id="conv-ana-2", topic="derivative",
+                         interaction_type="exercise_generated",
+                         created_at=datetime(2026, 4, 10, 12, 1, tzinfo=timezone.utc)),
+        TopicMetricEvent(id="event-integral-question-previous", user_id=ana.id,
+                         conversation_id="conv-ana-1", topic="integral",
+                         interaction_type="question",
+                         created_at=datetime(2026, 3, 25, 10, 0, tzinfo=timezone.utc)),
+        TopicMetricEvent(id="event-integral-generated-previous", user_id=ana.id,
+                         conversation_id="conv-ana-1", topic="integral",
+                         interaction_type="exercise_generated",
+                         created_at=datetime(2026, 3, 25, 10, 5, tzinfo=timezone.utc)),
+    ]
+    db.add_all(topic_events)
+    db.commit()
+    return ana, carlos
+
+
+def test_get_overview_returns_period_metrics() -> None:
+    db = build_session()
+    seed_data(db)
+    service = ReportsService()
+
+    result = service.get_overview(db=db, start=date(2026, 4, 1), end=date(2026, 4, 10))
+
+    assert isinstance(result, ReportsOverviewOut)
+    assert result.active_students == 2
+    assert result.total_queries == 4
+    assert result.resolved_exercises == 1
+    assert result.failed_exercises == 2
+    assert result.ai_resolution_rate == 0.3333
+    assert result.avg_queries_per_active_student == 2.0
+
+
+def test_list_students_filters_and_orders_active_students() -> None:
+    db = build_session()
+    ana, _ = seed_data(db)
+    service = ReportsService()
+
+    result = service.list_students(db=db, start=date(2026, 4, 1), end=date(2026, 4, 10), search="ana")
+
+    assert len(result) == 1
+    assert result[0].user_id == ana.id
+    assert result[0].conversation_count == 2
+    assert result[0].message_count == 3
+    assert result[0].exercise_count == 2
+
+
+def test_get_student_summary_returns_usage_metrics() -> None:
+    db = build_session()
+    ana, _ = seed_data(db)
+    service = ReportsService()
+
+    result = service.get_student_summary(db=db, user_id=ana.id, start=date(2026, 4, 1), end=date(2026, 4, 10))
+
+    assert isinstance(result, StudentReportSummaryOut)
+    assert result.user_id == ana.id
+    assert result.total_queries == 3
+    assert result.total_conversations == 2
+    assert result.total_exercises == 2
+    assert result.resolved_exercises == 1
+    assert result.failed_exercises == 1
+    assert result.ai_resolution_rate == 0.5
+    assert result.usage_frequency_days_per_week == 1.5
+    assert result.activity_span_hours_estimate == 213.92
+
+
+def test_get_student_weekly_activity_groups_events_by_week() -> None:
+    db = build_session()
+    ana, _ = seed_data(db)
+    service = ReportsService()
+
+    result = service.get_student_weekly_activity(db=db, user_id=ana.id, start=date(2026, 4, 1), end=date(2026, 4, 14))
+
+    assert isinstance(result, StudentWeeklyActivityOut)
+    assert [point.label for point in result.series] == ["Sem 1", "Sem 2"]
+    assert result.series[0].queries == 2
+    assert result.series[0].exercises == 1
+    assert result.series[1].queries == 1
+    assert result.series[1].exercises == 1
+
+
+def test_get_student_summary_returns_none_when_user_is_missing() -> None:
+    db = build_session()
+    seed_data(db)
+    service = ReportsService()
+
+    result = service.get_student_summary(db=db, user_id="missing-user", start=date(2026, 4, 1), end=date(2026, 4, 10))
+
+    assert result is None
+
+
+def test_list_topic_summaries_returns_metrics_for_supported_topics() -> None:
+    db = build_session()
+    seed_data(db)
+    service = ReportsService()
+
+    result = service.list_topic_summaries(db=db, start=date(2026, 4, 1), end=date(2026, 4, 10))
+
+    assert all(isinstance(item, TopicReportSummaryOut) for item in result)
+    by_topic = {item.topic: item for item in result}
+    assert by_topic["integral"].questions_count == 1
+    assert by_topic["integral"].exercises_generated == 1
+    assert by_topic["integral"].questions_change_ratio == 0.0
+    assert by_topic["integral"].interaction_level in {"low", "medium", "high"}
+    assert by_topic["derivative"].questions_count == 1
+    assert by_topic["derivative"].exercises_generated == 1
+    assert by_topic["limit"].questions_count == 1
+
+
+def test_get_topic_trend_returns_daily_series() -> None:
+    db = build_session()
+    seed_data(db)
+    service = ReportsService()
+
+    result = service.get_topic_trend(db=db, topic="integral", start=date(2026, 4, 1), end=date(2026, 4, 6), days=7)
+
+    assert isinstance(result, TopicTrendOut)
+    assert len(result.series) == 6
+    assert result.topic == "integral"
+    assert sum(point.questions for point in result.series) == 1
+
+
+--------------------------------------------------------------------------------
+  Archivo: tests/test_tutor_agent_service.py
+  IDs: CI-06, CI-08
+--------------------------------------------------------------------------------
+
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from app.services.knowledge_base_service import KnowledgeBaseService
+from app.services.math_parser_service import MathParserService
+from app.services.tutor_agent_service import TutorAgentService
+
+DATASETS_DIR = Path("/knowledge/datasets")
+if not DATASETS_DIR.exists():
+    DATASETS_DIR = Path(__file__).resolve().parents[2] / "knowledge" / "datasets"
+
+
+class FakeOllamaClient:
+    def generate(self, *, system_prompt: str, prompt: str, temperature: float = 0.2) -> str:
+        prompt_lower = prompt.lower()
+        if "proponme un ejercicio de derivadas" in prompt_lower:
+            return '{"action":"generate_practice","reason":"practice_request","topic":"derivative"}'
+        if "dame un ejercicio de la serie de taylor" in prompt_lower:
+            return '{"action":"generate_practice","reason":"practice_request","topic":"serie_de_taylor"}'
+        if "el resultado es 6x+2" in prompt_lower:
+            return '{"action":"grade_practice","reason":"pending_practice_attempt","topic":"derivative"}'
+        if "repito, eso es de derivada, no de la serie de taylor" in prompt_lower:
+            return '{"action":"generate_practice","reason":"practice_topic_correction","topic":"serie_de_taylor"}'
+        if "que sabes de calculo 1" in prompt_lower:
+            return '{"action":"answer_theory","reason":"theory_query","topic":"calculo_1"}'
+        return '{"action":"ask_clarification","reason":"default","topic":null}'
+
+
+class BrokenOllamaClient:
+    def generate(self, *, system_prompt: str, prompt: str, temperature: float = 0.2) -> str:
+        return "respuesta invalida"
+
+
+def build_agent() -> TutorAgentService:
+    return TutorAgentService(
+        settings=SimpleNamespace(),
+        knowledge_base_service=KnowledgeBaseService(DATASETS_DIR),
+        parser_service=MathParserService(),
+        ollama_client=FakeOllamaClient(),
+    )
+
+
+def build_broken_agent() -> TutorAgentService:
+    return TutorAgentService(
+        settings=SimpleNamespace(),
+        knowledge_base_service=KnowledgeBaseService(DATASETS_DIR),
+        parser_service=MathParserService(),
+        ollama_client=BrokenOllamaClient(),
+    )
+
+
+def test_agent_detects_practice_request() -> None:
+    agent = build_agent()
+    decision = agent.decide(message="Proponme un ejercicio de derivadas", conversation_context=[], agent_state={})
+    assert decision.action == "generate_practice"
+    assert decision.topic == "derivative"
+
+
+def test_agent_detects_taylor_practice_request() -> None:
+    agent = build_agent()
+    decision = agent.decide(message="Dame un ejercicio de la serie de Taylor", conversation_context=[], agent_state={})
+    assert decision.action == "generate_practice"
+    assert decision.topic == "serie_de_taylor"
+
+
+def test_agent_detects_mixed_theory_and_practice_request() -> None:
+    agent = build_agent()
+    decision = agent.decide(message="Dime que sabes de derivadas y proponme un ejercicio", conversation_context=[], agent_state={})
+    assert decision.action == "answer_theory_with_practice"
+
+
+def test_agent_detects_practice_answer_when_pending() -> None:
+    agent = build_agent()
+    decision = agent.decide(
+        message="El resultado es 6x+2",
+        conversation_context=["assistant: Deriva la funcion f(x) = 3*x^2 + 2*x - 5."],
+        agent_state={"pending_practice": {"topic": "derivative", "expected_answer": "6*x + 2"}},
+    )
+    assert decision.action == "grade_practice"
+
+
+def test_agent_detects_short_math_answer_when_it_matches_pending_practice() -> None:
+    agent = build_agent()
+    decision = agent.decide(
+        message="6x+2",
+        conversation_context=["assistant: Deriva la funcion f(x) = 3*x^2 + 2*x - 5."],
+        agent_state={"pending_practice": {"topic": "derivative", "expected_answer": "6*x + 2"}},
+    )
+    assert decision.action == "grade_practice"
+
+
+def test_agent_detects_practice_topic_correction() -> None:
+    agent = build_agent()
+    decision = agent.decide(
+        message="Repito, eso es de derivada, no de la serie de Taylor",
+        conversation_context=["assistant: Deriva la funcion f(x) = 3*x^2 + 2*x - 5."],
+        agent_state={"pending_practice": {"topic": "derivative", "expected_answer": "6*x + 2"}},
+    )
+    assert decision.action == "generate_practice"
+    assert decision.topic == "serie_de_taylor"
+
+
+def test_agent_allows_context_switch_to_new_exercise_when_practice_is_pending() -> None:
+    agent = build_agent()
+    decision = agent.decide(
+        message="Resuelve x^2 + 3*x = 10",
+        conversation_context=["assistant: Deriva la funcion f(x) = 3*x^2 + 2*x - 5."],
+        agent_state={"pending_practice": {"topic": "derivative", "expected_answer": "6*x + 2"}},
+    )
+    assert decision.action == "solve_exercise"
+
+
+def test_agent_allows_mixed_theory_and_practice_when_practice_is_pending() -> None:
+    agent = build_agent()
+    decision = agent.decide(
+        message="Explicame que es una derivada y proponme un ejercicio",
+        conversation_context=["assistant: Deriva la funcion f(x) = 3*x^2 + 2*x - 5."],
+        agent_state={"pending_practice": {"topic": "derivative", "expected_answer": "6*x + 2"}},
+    )
+    assert decision.action == "answer_theory_with_practice"
+
+
+def test_agent_does_not_force_practice_grading_for_unrelated_math_expression() -> None:
+    agent = build_agent()
+    decision = agent.decide(
+        message="x^3/3 + 2x^2 + x + C",
+        conversation_context=["assistant: Deriva la funcion f(x) = 3*x^2 + 2*x - 5."],
+        agent_state={"pending_practice": {"topic": "derivative", "expected_answer": "6*x + 2"}},
+    )
+    assert decision.action == "solve_exercise"
+
+
+def test_agent_detects_theory_question() -> None:
+    agent = build_agent()
+    decision = agent.decide(message="Que sabes de calculo 1", conversation_context=[], agent_state={})
+    assert decision.action == "answer_theory"
+
+
+def test_agent_falls_back_to_rules_when_ollama_returns_invalid_router_output() -> None:
+    agent = build_broken_agent()
+    decision = agent.decide(message="Dime que sabes de derivadas y proponme un ejercicio", conversation_context=[], agent_state={})
+    assert decision.action == "answer_theory_with_practice"
+
+
+def test_agent_falls_back_to_rule_based_theory_routing() -> None:
+    agent = build_broken_agent()
+    decision = agent.decide(message="Que es una derivada", conversation_context=[], agent_state={})
+    assert decision.action == "answer_theory"
+
+
+def test_agent_requires_ollama() -> None:
+    agent = TutorAgentService(
+        settings=SimpleNamespace(),
+        knowledge_base_service=KnowledgeBaseService(DATASETS_DIR),
+        parser_service=MathParserService(),
+        ollama_client=None,
+    )
+    with pytest.raises(RuntimeError, match="OllamaClient no esta configurado"):
+        agent.decide(message="Que sabes de calculo 1", conversation_context=[], agent_state={})
+
+
+--------------------------------------------------------------------------------
+  Archivo: tests/test_conversation_orchestrator_service.py
+  IDs: CI-07
+--------------------------------------------------------------------------------
+
+from types import SimpleNamespace
+
+from app.schemas.enums import ChatMode
+from app.services.conversation_orchestrator_service import ConversationOrchestratorService
+from app.services.math_parser_service import MathParserService
+
+
+class DirectReplyOllamaClient:
+    def generate(self, *, system_prompt: str, prompt: str, temperature: float = 0.2) -> str:
+        return (
+            '{"mode":"direct","reply":"Vamos con el mismo ejercicio. '
+            'Primero aplicamos la regla del producto y luego derivamos cada factor.",'
+            '"reason":"continues current exercise","topic":"derivative",'
+            '"detail_level":"detailed","confidence":0.91}'
+        )
+
+
+class ToolReplyOllamaClient:
+    def generate(self, *, system_prompt: str, prompt: str, temperature: float = 0.2) -> str:
+        return (
+            '{"mode":"tool","actions":["generate_practice"],'
+            '"reason":"wants a fresh exercise","topic":"integral",'
+            '"detail_level":"auto","confidence":0.87}'
+        )
+
+
+def test_orchestrator_can_reply_directly_when_context_is_enough() -> None:
+    service = ConversationOrchestratorService(settings=SimpleNamespace(), ollama_client=DirectReplyOllamaClient())
+
+    result = service.orchestrate(
+        message="No supe resolverlo, podrias hacerme el paso por paso?",
+        requested_mode=ChatMode.AUTO,
+        conversation_context=["assistant: Deriva x^2*cos(x) usando la regla del producto."],
+        agent_state={"pending_practice": {"topic": "derivative", "exercise_text": "Deriva x^2*cos(x)."}},
+    )
+
+    assert result is not None
+    assert result.mode == "direct"
+    assert "regla del producto" in (result.reply or "")
+
+
+def test_orchestrator_can_request_a_tool_without_using_the_planner() -> None:
+    service = ConversationOrchestratorService(settings=SimpleNamespace(), ollama_client=ToolReplyOllamaClient())
+
+    result = service.orchestrate(
+        message="Dame un ejercicio nuevo de integrales",
+        requested_mode=ChatMode.AUTO,
+        conversation_context=[],
+        agent_state={},
+    )
+
+    assert result is not None
+    assert result.mode == "tool"
+    assert result.actions == ["generate_practice"]
+
+
+def test_orchestrator_prioritizes_a_new_explicit_exercise_over_previous_context() -> None:
+    service = ConversationOrchestratorService(
+        settings=SimpleNamespace(),
+        ollama_client=DirectReplyOllamaClient(),
+        parser_service=MathParserService(),
+    )
+
+    result = service.orchestrate(
+        message="puedes resolver la derivada de ln(x)/x*sec(x)?",
+        requested_mode=ChatMode.AUTO,
+        conversation_context=["assistant: Deriva la funcion f(x) = 4*x^3 - x + 6."],
+        agent_state={"pending_practice": {"topic": "derivative", "raw_input": "derivada de 4*x^3 - x + 6",
+                                          "exercise_text": "Deriva la funcion f(x) = 4*x^3 - x + 6."}},
+    )
+
+    assert result is not None
+    assert result.mode == "tool"
+    assert result.actions == ["solve_exercise"]
+
+
+--------------------------------------------------------------------------------
+  Archivo: tests/test_conversation_planner_service.py
+  IDs: CI-08
+--------------------------------------------------------------------------------
+
+from pathlib import Path
+from types import SimpleNamespace
+
+from app.schemas.enums import ChatMode
+from app.services.conversation_planner_service import ConversationPlannerService
+from app.services.knowledge_base_service import KnowledgeBaseService
+from app.services.math_parser_service import MathParserService
+
+DATASETS_DIR = Path("/knowledge/datasets")
+if not DATASETS_DIR.exists():
+    DATASETS_DIR = Path(__file__).resolve().parents[2] / "knowledge" / "datasets"
+
+
+class FakePlannerOllamaClient:
+    def generate(self, *, system_prompt: str, prompt: str, temperature: float = 0.2) -> str:
+        prompt_lower = prompt.lower()
+        if "dime que sabes de derivadas y proponme un ejercicio" in prompt_lower:
+            return '{"intent":"mixed_theory_practice","target":"new_topic","reason":"mixed_theory_practice","topic":"derivative","detail_level":"auto","confidence":0.96}'
+        if "el resultado es 6x+2" in prompt_lower:
+            return '{"intent":"grade_active_practice","target":"active_practice","reason":"practice_attempt","topic":"derivative","detail_level":"auto","confidence":0.9}'
+        if "puedes explicarme ese ejercicio paso por paso" in prompt_lower:
+            return '{"intent":"explain_practice_context","target":"active_practice","reason":"walk_through_pending","topic":"integral","detail_level":"detailed","confidence":0.94}'
+        if "si, dame el paso a paso" in prompt_lower:
+            return '{"intent":"explain_practice_context","target":"recent_practice","reason":"continue_recent_exercise","topic":"integral","detail_level":"detailed","confidence":0.91}'
+        return '{"intent":"clarify","target":"unknown","reason":"default","topic":null,"detail_level":"auto","confidence":0.3}'
+
+
+class BrokenPlannerOllamaClient:
+    def generate(self, *, system_prompt: str, prompt: str, temperature: float = 0.2) -> str:
+        return "salida invalida"
+
+
+class HesitantPlannerOllamaClient:
+    def generate(self, *, system_prompt: str, prompt: str, temperature: float = 0.2) -> str:
+        return '{"intent":"clarify","target":"unknown","reason":"unsure","topic":null,"detail_level":"auto","confidence":0.2}'
+
+
+class MisleadingPlannerOllamaClient:
+    def generate(self, *, system_prompt: str, prompt: str, temperature: float = 0.2) -> str:
+        return '{"intent":"solve_new_problem","target":"new_problem","reason":"wrong_router","topic":"integral","detail_level":"auto","confidence":0.72}'
+
+
+class PracticeRecoveryPlannerOllamaClient:
+    def generate(self, *, system_prompt: str, prompt: str, temperature: float = 0.2) -> str:
+        prompt_lower = prompt.lower()
+        if "continuaciones de una practica matematica" in prompt_lower and "si, dame el paso a paso" in prompt_lower:
+            return '{"actions":["explain_practice_context"],"reason":"continue_recent_exercise","topic":"integral","detail_level":"detailed"}'
+        return '{"intent":"clarify","target":"unknown","reason":"unsure","topic":null,"detail_level":"auto","confidence":0.2}'
+
+
+class ContextAwarePracticePlannerOllamaClient:
+    def generate(self, *, system_prompt: str, prompt: str, temperature: float = 0.2) -> str:
+        prompt_lower = prompt.lower()
+        if "resolutor semantico del contexto de practica" in prompt_lower:
+            if "no supe resolverlo, podrias hacerme el paso por paso?" in prompt_lower:
+                return '{"actions":["explain_practice_context"],"reason":"needs_help_with_current_exercise","topic":"derivative","detail_level":"detailed","confidence":0.94}'
+            if "el ejercicio anterior no lo supe resolver, dame el paso por paso." in prompt_lower:
+                return '{"actions":["explain_practice_context"],"reason":"revisit_previous_exercise","topic":"derivative","detail_level":"detailed","confidence":0.92}'
+        return '{"intent":"clarify","target":"unknown","reason":"default","topic":null,"detail_level":"auto","confidence":0.3}'
+
+
+def build_service(ollama_client: object) -> ConversationPlannerService:
+    return ConversationPlannerService(
+        settings=SimpleNamespace(),
+        knowledge_base_service=KnowledgeBaseService(DATASETS_DIR),
+        parser_service=MathParserService(),
+        ollama_client=ollama_client,
+    )
+
+
+def test_planner_detects_mixed_theory_and_practice_request() -> None:
+    service = build_service(FakePlannerOllamaClient())
+    plan = service.plan(message="Dime que sabes de derivadas y proponme un ejercicio", requested_mode=ChatMode.AUTO, conversation_context=[], agent_state={})
+    assert plan.actions == ["answer_theory", "generate_practice"]
+    assert plan.topic == "derivative"
+
+
+def test_planner_detects_pending_practice_answer() -> None:
+    service = build_service(FakePlannerOllamaClient())
+    plan = service.plan(
+        message="El resultado es 6x+2", requested_mode=ChatMode.AUTO,
+        conversation_context=["assistant: Deriva la funcion f(x) = 3*x^2 + 2*x - 5."],
+        agent_state={"pending_practice": {"topic": "derivative", "expected_answer": "6*x + 2"}},
+    )
+    assert plan.actions == ["grade_practice"]
+
+
+def test_planner_detects_request_to_explain_active_practice() -> None:
+    service = build_service(FakePlannerOllamaClient())
+    plan = service.plan(
+        message="Puedes explicarme ese ejercicio paso por paso?", requested_mode=ChatMode.AUTO,
+        conversation_context=["assistant: Resuelve esta integral: integral de x^2 + 4*x + 1 dx."],
+        agent_state={"pending_practice": {"topic": "integral", "exercise_text": "Resuelve esta integral: integral de x^2 + 4*x + 1 dx."}},
+    )
+    assert plan.actions == ["explain_practice_context"]
+    assert plan.detail_level == "detailed"
+
+
+def test_planner_detects_request_to_explain_recently_completed_practice() -> None:
+    service = build_service(FakePlannerOllamaClient())
+    plan = service.plan(
+        message="Si, dame el paso a paso", requested_mode=ChatMode.AUTO,
+        conversation_context=["assistant: Si, ese resultado esta correcto: -x*cos(x) + sin(x)."],
+        agent_state={"last_practice_context": {"topic": "integral", "exercise_text": "Resuelve la integral de x*sin(x) dx.",
+                                               "expected_answer": "-x*cos(x) + sin(x)", "status": "completed", "last_outcome": "correct"}},
+    )
+    assert plan.actions == ["explain_practice_context"]
+    assert plan.detail_level == "detailed"
+
+
+def test_planner_recovers_recent_practice_follow_up_semantically() -> None:
+    service = build_service(PracticeRecoveryPlannerOllamaClient())
+    plan = service.plan(
+        message="Si, dame el paso a paso", requested_mode=ChatMode.AUTO,
+        conversation_context=["assistant: Si, ese resultado esta correcto: -x*cos(x) + sin(x)."],
+        agent_state={"last_practice_context": {"topic": "integral", "status": "completed", "last_outcome": "correct"}},
+    )
+    assert plan.actions == ["explain_practice_context"]
+    assert plan.reason.startswith("practice_follow_up_")
+
+
+def test_planner_understands_help_request_for_active_practice_from_contextual_step() -> None:
+    service = build_service(ContextAwarePracticePlannerOllamaClient())
+    plan = service.plan(
+        message="No supe resolverlo, podrias hacerme el paso por paso?", requested_mode=ChatMode.AUTO,
+        conversation_context=["assistant: Vamos con un ejercicio para practicar. Calcula la derivada de x^2*cos(x)."],
+        agent_state={"pending_practice": {"topic": "derivative", "exercise_text": "Calcula la derivada de x^2*cos(x).", "expected_answer": "-x^2*sin(x) + 2*x*cos(x)"}},
+    )
+    assert plan.actions == ["explain_practice_context"]
+    assert plan.reason.startswith("contextual_practice_")
+
+
+def test_planner_understands_help_request_for_recent_practice_from_contextual_step() -> None:
+    service = build_service(ContextAwarePracticePlannerOllamaClient())
+    plan = service.plan(
+        message="El ejercicio anterior no lo supe resolver, dame el paso por paso.", requested_mode=ChatMode.AUTO,
+        conversation_context=["assistant: Hace un momento te propuse derivar x*cos(x)."],
+        agent_state={"last_practice_context": {"topic": "derivative", "exercise_text": "Calcula la derivada de x*cos(x).", "expected_answer": "-x*sin(x) + cos(x)", "status": "completed", "last_outcome": "incorrect"}},
+    )
+    assert plan.actions == ["explain_practice_context"]
+    assert plan.reason.startswith("contextual_practice_")
+
+
+def test_planner_falls_back_to_rules_when_ollama_returns_invalid_output() -> None:
+    service = build_service(BrokenPlannerOllamaClient())
+    plan = service.plan(message="Dime que sabes de derivadas y proponme un ejercicio", requested_mode=ChatMode.AUTO, conversation_context=[], agent_state={})
+    assert plan.actions == ["answer_theory", "generate_practice"]
+
+
+def test_planner_infers_course_level_practice_request_when_ollama_fails() -> None:
+    service = build_service(BrokenPlannerOllamaClient())
+    plan = service.plan(message="Asi esta bien, podrias darme un ejercicio de calculo 2", requested_mode=ChatMode.AUTO, conversation_context=[], agent_state={})
+    assert plan.actions == ["generate_practice"]
+
+
+def test_planner_reroutes_ask_clarification_when_course_level_practice_is_clear() -> None:
+    service = build_service(HesitantPlannerOllamaClient())
+    plan = service.plan(message="Asi esta bien, podrias darme un ejercicio de calculo 2", requested_mode=ChatMode.AUTO, conversation_context=[], agent_state={})
+    assert plan.actions == ["generate_practice"]
+
+
+def test_planner_reroutes_open_course_question_to_theory_when_llm_is_hesitant() -> None:
+    service = build_service(HesitantPlannerOllamaClient())
+    plan = service.plan(message="Hoola, que me puedes explicar de calculo 2", requested_mode=ChatMode.AUTO, conversation_context=[], agent_state={})
+    assert plan.actions == ["answer_theory"]
+
+
+def test_planner_respects_requested_mode() -> None:
+    service = build_service(BrokenPlannerOllamaClient())
+    plan = service.plan(message="Resuelve x^2 + 1 = 0", requested_mode=ChatMode.EXERCISE, conversation_context=[], agent_state={})
+    assert plan.actions == ["solve_exercise"]
+
+
+def test_planner_reroutes_natural_practice_request_even_if_llm_marks_it_as_solver_task() -> None:
+    service = build_service(MisleadingPlannerOllamaClient())
+    plan = service.plan(message="Dame un ejercicio de integrales", requested_mode=ChatMode.AUTO, conversation_context=[], agent_state={})
+    assert plan.actions == ["generate_practice"]
+    assert plan.reason == "guardrail_reroute_natural_practice_request"
+
+
+def test_planner_keeps_solver_task_when_message_contains_explicit_math_expression() -> None:
+    service = build_service(MisleadingPlannerOllamaClient())
+    plan = service.plan(message="Resuelve la integral de x^2 + 1 dx", requested_mode=ChatMode.AUTO, conversation_context=[], agent_state={})
+    assert plan.actions == ["solve_exercise"]
+
+
+================================================================================
+  ====Frontend Tests====
+  (run_integration_tests.ps1 ejecuta los mismos archivos del frontend)
+================================================================================
+
+Los archivos de prueba del frontend no tienen pruebas de integracion independientes.
+El script run_integration_tests.ps1 reutiliza los archivos unitarios del frontend
+agrupados por describe block (casos normales / casos limite / caso erroneo).
+
+Para ver el codigo completo de las pruebas frontend consultar: pruebas_unitarias.txt
+
+
+================================================================================
+  FIN DEL DOCUMENTO
+================================================================================

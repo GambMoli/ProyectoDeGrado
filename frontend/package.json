@@ -6,7 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview --host 0.0.0.0 --port 4173"
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:normal": "vitest run --reporter=verbose -t \"casos normales\"",
+    "test:limite": "vitest run --reporter=verbose -t \"casos limite\"",
+    "test:error": "vitest run --reporter=verbose -t \"caso erroneo\""
   },
   "dependencies": {
     "katex": "^0.16.44",
@@ -24,6 +29,7 @@
     "@types/react-dom": "18.3.5",
     "@vitejs/plugin-react-swc": "3.8.0",
     "typescript": "5.8.3",
-    "vite": "5.4.19"
+    "vite": "5.4.19",
+    "vitest": "^2.0.0"
   }
 }

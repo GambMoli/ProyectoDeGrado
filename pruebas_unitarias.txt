@@ -1,0 +1,674 @@
+================================================================================
+  PRUEBAS UNITARIAS — ProyectoDeGrado
+================================================================================
+
+
+================================================================================
+  ====Script Test====
+  Archivo: run_tests.ps1
+================================================================================
+
+Proposito:
+  Automatiza la ejecucion de todas las pruebas unitarias del proyecto.
+  Ejecuta el backend con pytest y el frontend con vitest (pnpm).
+  Clasifica las pruebas en tres categorias: Casos Normales, Casos Limite,
+  Casos Erroneos.
+
+Archivos de prueba Backend:
+  - tests/test_security.py
+  - tests/test_expression_normalizer.py
+  - tests/test_llm_text.py
+  - tests/test_math_parser_functions.py
+  - tests/test_extract_student_answer.py
+  - tests/test_math_answer_functions.py
+  - tests/test_practice_state.py
+
+Filtros pytest por categoria:
+  - Casos Normales  → -k TestNormal
+  - Casos Limite    → -k TestLimite
+  - Casos Erroneos  → -k TestError
+
+Scripts frontend (pnpm):
+  - Casos Normales  → test:normal   (vitest -t "casos normales")
+  - Casos Limite    → test:limite   (vitest -t "casos limite")
+  - Casos Erroneos  → test:error    (vitest -t "caso erroneo")
+
+Ejecucion:
+  .\run_tests.ps1
+  powershell -ExecutionPolicy Bypass -File .\run_tests.ps1
+
+Codigo de salida:
+  0 → todas las pruebas pasaron
+  1 → al menos una prueba fallo
+
+
+================================================================================
+  ====Backend Tests====
+================================================================================
+
+--------------------------------------------------------------------------------
+  Archivo: tests/test_security.py
+  Modulo:  app.utils.security
+  Funciones probadas: hash_password | verify_password | expires_in_hours
+--------------------------------------------------------------------------------
+
+  [TestHashPassword]
+
+    [TestNormal]
+      - test_produce_formato_pbkdf2_sha256
+          Verifica que el hash generado tenga el formato pbkdf2_sha256$iter$salt$hash.
+
+      - test_hash_resultante_es_string
+          Verifica que el tipo de retorno sea str.
+
+      - test_iteraciones_por_defecto_en_hash
+          Verifica que las iteraciones por defecto sean 390000.
+
+    [TestLimite]
+      - test_dos_llamadas_producen_hashes_distintos
+          Verifica que el salt aleatorio produce hashes distintos para la misma clave.
+
+      - test_password_vacio_produce_hash_valido
+          Verifica que una contrasena vacia se hashea sin excepcion.
+
+      - test_password_muy_largo_produce_hash
+          Verifica que una contrasena de 1000 caracteres se procesa correctamente.
+
+      - test_iteraciones_personalizadas_quedan_en_hash
+          Verifica que el parametro iterations se refleja en el hash resultante.
+
+    [TestError]
+      - test_password_con_caracteres_unicode_no_lanza_excepcion
+          Verifica que caracteres unicode (e.g. 'e', 'n') no generan excepcion.
+
+  [TestVerifyPassword]
+
+    [TestNormal]
+      - test_verifica_password_correcto
+          Verifica que una contrasena correcta retorna True.
+
+      - test_rechaza_password_incorrecto
+          Verifica que una contrasena erronea retorna False.
+
+      - test_verifica_password_con_caracteres_especiales
+          Verifica verificacion con caracteres especiales en la contrasena.
+
+    [TestLimite]
+      - test_es_sensible_a_mayusculas
+          Verifica que 'password1!' != 'Password1!' (case-sensitive).
+
+      - test_rechaza_password_vacio_contra_hash_real
+          Verifica que string vacio no coincide con hash de clave real.
+
+      - test_verifica_password_vacio_hasheado
+          Verifica que string vacio coincide con su propio hash.
+
+    [TestError]
+      - test_retorna_false_para_hash_none
+          Verifica retorno False cuando el hash es None.
+
+      - test_retorna_false_para_hash_vacio
+          Verifica retorno False cuando el hash es string vacio.
+
+      - test_retorna_false_para_hash_malformado
+          Verifica retorno False cuando el hash no tiene formato valido.
+
+      - test_retorna_false_para_algoritmo_desconocido
+          Verifica retorno False para prefijo de algoritmo no soportado (md5).
+
+  [TestExpiresInHours]
+
+    [TestNormal]
+      - test_retorna_datetime_en_el_futuro
+          Verifica que el datetime retornado es posterior al momento actual.
+
+      - test_agrega_horas_correctas
+          Verifica que se suman exactamente N horas al tiempo actual.
+
+      - test_retorna_datetime_con_timezone_utc
+          Verifica que el datetime tiene tzinfo distinto de None.
+
+    [TestLimite]
+      - test_cero_horas_retorna_tiempo_cercano_a_ahora
+          Verifica que 0 horas retorna un datetime equivalente al momento actual.
+
+      - test_valor_grande_de_horas
+          Verifica que 8760 horas (1 anio) retorna un datetime en el futuro lejano.
+
+    [TestError]
+      - test_horas_negativas_retorna_fecha_en_el_pasado
+          Verifica que horas negativas retornan un datetime anterior al actual.
+
+
+--------------------------------------------------------------------------------
+  Archivo: tests/test_expression_normalizer.py
+  Modulo:  app.utils.expression_normalizer
+  Funciones probadas: normalize_text | looks_like_math |
+                      looks_like_structured_math | extract_candidate_segment
+--------------------------------------------------------------------------------
+
+  [TestNormalizeText]
+
+    [TestNormal]
+      - test_convierte_simbolo_unicode_integral
+          Verifica que el simbolo Unicode integral se traduce a la palabra "integral".
+
+      - test_convierte_latex_frac_a_fraccion
+          Verifica que \frac{d}{dx} se convierte a "d/dx".
+
+      - test_elimina_espacios_multiples
+          Verifica que espacios multiples consecutivos se reducen a uno.
+
+      - test_reemplaza_guion_unicode_por_menos
+          Verifica que el guion Unicode (−) se reemplaza por el guion ASCII (-).
+
+    [TestLimite]
+      - test_texto_vacio_retorna_vacio
+          Verifica que el string vacio retorna string vacio.
+
+      - test_elimina_espacios_al_inicio_y_final
+          Verifica que el resultado esta libre de espacios al inicio y final.
+
+      - test_latex_con_multiples_comandos
+          Verifica que \int y dx se preservan correctamente tras normalizacion.
+
+    [TestError]
+      - test_texto_sin_matematica_retorna_texto_limpio
+          Verifica que texto en prosa sin matematica pasa sin modificaciones.
+
+  [TestLooksLikeMath]
+
+    [TestNormal]
+      - test_detecta_operador_aritmetico        → "3 + x" → True
+      - test_detecta_keyword_sin                → "sin(x)" → True
+      - test_detecta_combinacion_numero_letra   → "3x" → True
+      - test_detecta_notacion_derivada_dx       → "dx" → True
+      - test_detecta_ecuacion_con_igual         → "x = 5" → True
+
+    [TestLimite]
+      - test_detecta_solo_parentesis            → "()" → True
+      - test_detecta_keyword_integral           → "integral de x" → True
+      - test_detecta_keyword_derivada           → "derivada" → True
+
+    [TestError]
+      - test_rechaza_texto_en_prosa             → "hola como estas hoy" → False
+      - test_rechaza_string_vacio               → "" → False
+      - test_rechaza_letras_sin_contexto_matematico → "abc" → False
+
+  [TestLooksLikeStructuredMath]
+
+    [TestNormal]
+      - test_detecta_expresion_con_igual        → "2*x + 3 = 7" → True
+      - test_detecta_integral_unicode           → "∫ 3x^2 e^x dx" → True
+      - test_detecta_variable_con_potencia      → "x^2 + 1" → True
+
+    [TestLimite]
+      - test_detecta_notacion_limite            → "x -> 0" → True
+      - test_detecta_coeficiente_numerico       → "3x" → True
+
+    [TestError]
+      - test_rechaza_texto_ocr_basura           → "cv 2826 See Oe..." → False
+      - test_rechaza_string_vacio               → "" → False
+
+  [TestExtractCandidateSegment]
+
+    [TestNormal]
+      - test_extrae_linea_matematica_de_texto_multilinea
+          Input: "Calcula la siguiente expresion\n2*x^2 + 3*x - 1"
+          Esperado: segmento contiene "2*x".
+
+      - test_extrae_segmento_despues_de_dos_puntos
+          Input: "Ejercicio: integral de x^2 dx"
+          Esperado: segmento contiene "integral" o "x^2".
+
+      - test_prefiere_ultima_linea_matematica
+          Input multilinea con varias expresiones.
+          Esperado: retorna la ultima linea matematica.
+
+    [TestLimite]
+      - test_retorna_input_si_no_hay_matematica
+          Texto sin contenido matematico retorna el mismo texto.
+
+      - test_maneja_texto_con_solo_dos_puntos
+          "Nota: sin contexto matematico" retorna string no vacio.
+
+    [TestError]
+      - test_maneja_string_vacio
+          Input "" retorna "".
+
+
+--------------------------------------------------------------------------------
+  Archivo: tests/test_llm_text.py
+  Modulo:  app.utils.llm_text
+  Funcion probada: normalize_llm_math_text
+--------------------------------------------------------------------------------
+
+  [TestNormalizeLlmMathText]
+
+    [TestNormal]
+      - test_preserva_delimitadores_latex_inline
+          Verifica que \( y \) permanecen intactos.
+
+      - test_elimina_left_y_right
+          Verifica que \left y \right son eliminados del texto.
+
+      - test_elimina_negritas_markdown
+          Verifica que ** es eliminado pero el contenido se preserva.
+
+    [TestLimite]
+      - test_preserva_frac_latex
+          Verifica que \frac no es alterado.
+
+      - test_reduce_multiples_saltos_de_linea
+          Mas de dos \n consecutivos se reducen a maximo dos.
+
+      - test_string_solo_espacios_retorna_vacio
+          Input "   " retorna "".
+
+    [TestError]
+      - test_string_vacio_retorna_vacio
+          Input "" retorna "".
+
+      - test_texto_sin_latex_pasa_sin_cambios
+          Texto plano sin LaTeX retorna identico.
+
+
+--------------------------------------------------------------------------------
+  Archivo: tests/test_math_parser_functions.py
+  Modulo:  app.services.math_parser_service
+  Funciones probadas: _detect_problem_type | _cleanup_expression
+--------------------------------------------------------------------------------
+
+  [TestDetectProblemType]
+
+    [TestNormal]
+      - test_detecta_derivada_por_keyword       → "derivada de x^2" → DERIVATIVE
+      - test_detecta_integral_por_keyword       → "integral de x^2" → INTEGRAL
+      - test_detecta_limite_por_keyword         → "limite de x cuando x->0" → LIMIT
+      - test_detecta_ecuacion_por_signo_igual   → "x^2 = 4" → EQUATION
+      - test_detecta_simplificacion_por_keyword → "simplifica x^2+2x+1" → SIMPLIFICATION
+
+    [TestLimite]
+      - test_detecta_derivada_por_notacion_d_dx → "d/dx x^3" → DERIVATIVE
+      - test_detecta_integral_por_sufijo_dx     → "x^2 dx" → INTEGRAL
+      - test_detecta_limite_por_flecha          → "x -> 2" → LIMIT
+      - test_detecta_simplificacion_si_parece_math_estructurado → "x^2 + 1" → SIMPLIFICATION
+
+    [TestError]
+      - test_lanza_error_sin_math_claro
+          Input sin matematica lanza MathParserError con code="no_clear_exercise".
+
+      - test_error_contiene_mensaje_usuario
+          El error contiene un user_message no vacio.
+
+  [TestCleanupExpression]
+
+    [TestNormal]
+      - test_elimina_instruccion_al_inicio      → "calcula x^2 + 1" → "x^2 + 1"
+      - test_elimina_signos_de_puntuacion_al_final → "x^2 + 1." no termina en "."
+      - test_normaliza_espacios                 → "x^2   +   1" → sin doble espacio
+
+    [TestLimite]
+      - test_elimina_simbolo_integral_unicode   → "∫ x^2 dx" sin simbolo ∫
+      - test_elimina_contexto_de_limite_al_final → "x^2 cuando x tiende a 0" sin "tiende"
+      - test_string_solo_instruccion_retorna_vacio → "calcula simplifica" → ""
+
+    [TestError]
+      - test_string_vacio_retorna_vacio         → "" → ""
+      - test_string_solo_espacios_retorna_vacio → "   " → ""
+      - test_puntuacion_sola_retorna_vacio      → "?!.,;:" → ""
+
+
+--------------------------------------------------------------------------------
+  Archivo: tests/test_extract_student_answer.py
+  Modulo:  app.services.practice.math
+  Funcion probada: extract_student_answer
+--------------------------------------------------------------------------------
+
+  [TestExtractStudentAnswer]
+
+    [TestNormal]
+      - test_strips_el_resultado_es             → "el resultado es 2*x" → "2*x"
+      - test_strips_mi_respuesta_es             → "mi respuesta es x^2 + 1" → "x^2 + 1"
+      - test_strips_resultado_colon             → "resultado: 3*x" → "3*x"
+      - test_strips_respuesta_colon             → "respuesta: x/2" → "x/2"
+      - test_strips_creo_que_es                 → "creo que es 5" → "5"
+      - test_retorna_expresion_sin_prefijo_sin_cambios → "2*x + 1" → "2*x + 1"
+
+    [TestLimite]
+      - test_extrae_lado_derecho_con_keyword_integral → "la integral = x^2/2" contiene "x^2/2"
+      - test_elimina_espacios_extra             → "  el resultado es   3*x^2  " → "3*x^2"
+      - test_strips_es_prefijo_simple           → "es 2*x + 3" → "2*x + 3"
+      - test_prefijo_en_mayusculas              → "El resultado es x + 1" → "x + 1"
+
+    [TestError]
+      - test_maneja_string_vacio               → "" → ""
+      - test_maneja_solo_espacios              → "   " → ""
+
+
+--------------------------------------------------------------------------------
+  Archivo: tests/test_math_answer_functions.py
+  Modulo:  app.services.practice.math
+  Funciones probadas: answers_match | integral_answers_match
+--------------------------------------------------------------------------------
+
+  [TestAnswersMatch]
+
+    [TestNormal]
+      - test_derivada_correcta_retorna_true
+          expected="2*x", student="2*x" → True
+
+      - test_derivada_equivalente_simbolicamente_retorna_true
+          expected="2*x", student="x + x" → True (equivalencia simbolica)
+
+      - test_integral_con_constante_mayuscula_normalizada
+          expected="x**2/2 + C", student="x**2/2 + c" → True
+
+      - test_ecuacion_con_x_igual_retorna_true
+          expected="x = 2", student="2" → True
+
+    [TestLimite]
+      - test_respuesta_diferente_retorna_false
+          expected="2*x", student="3*x" → False
+
+      - test_integral_diferente_en_constante_retorna_true
+          expected="x**2/2 + c", student="x**2/2 + 5" → True (constante arbitraria)
+
+      - test_expresiones_con_potencias_xor_equivalentes
+          expected="x**2", student="x^2" → True (xor como potencia)
+
+    [TestError]
+      - test_student_answer_vacia_retorna_false
+          student="" → False
+
+      - test_expresion_no_parseable_retorna_false
+          student="no es math @@##" → False
+
+      - test_expected_no_parseable_retorna_false
+          expected="@@invalido" → False
+
+  [TestIntegralAnswersMatch]
+
+    [TestNormal]
+      - test_antiderivadas_equivalentes_retornan_true
+          expected=x^2/2, student=x^2/2 → True
+
+      - test_antiderivadas_difieren_en_constante_retornan_true
+          expected=x^2/2, student=x^2/2 + 5 → True
+
+      - test_sin_x_antiderivada
+          expected=-cos(x), student=-cos(x) + 3 → True
+
+    [TestLimite]
+      - test_antiderivadas_completamente_distintas_retornan_false
+          expected=x^2/2, student=x^3/3 → False
+
+      - test_con_multiples_variables_usa_primera_alfabeticamente
+          Diferencia respecto a x; constante en y se ignora.
+
+    [TestError]
+      - test_constante_vs_funcion_retorna_false
+          expected=x^2, student=c (solo constante) → False
+
+
+--------------------------------------------------------------------------------
+  Archivo: tests/test_practice_state.py
+  Modulo:  app.services.practice.state
+  Funciones probadas: snapshot_practice_context | keywords_from_references
+--------------------------------------------------------------------------------
+
+  [TestSnapshotPracticeContext]
+
+    [TestNormal]
+      - test_status_siempre_es_completed
+          El campo "status" del snapshot siempre es "completed".
+
+      - test_incluye_campos_del_contexto
+          topic, expected_answer y last_outcome se copian correctamente.
+
+      - test_keywords_y_history_son_listas
+          Los campos keywords y practice_history son de tipo list.
+
+      - test_last_outcome_por_defecto_es_completed
+          Sin argumento last_outcome, el valor por defecto es "completed".
+
+    [TestLimite]
+      - test_attempts_override_tiene_prioridad
+          Si se pasa attempts=7, ese valor gana sobre el del contexto (1).
+
+      - test_usa_attempts_del_contexto_si_no_hay_override
+          Sin override, se usa el valor del contexto.
+
+      - test_keywords_none_retorna_lista_vacia
+          keywords=None en contexto retorna [].
+
+      - test_history_none_retorna_lista_vacia
+          practice_history=None en contexto retorna [].
+
+    [TestError]
+      - test_contexto_vacio_no_lanza_excepcion
+          {} como contexto produce snapshot valido con valores por defecto.
+
+  [TestKeywordsFromReferences]
+
+    [TestNormal]
+      - test_retorna_keywords_de_referencias
+          Tags de las referencias aparecen en el resultado.
+
+      - test_preserva_orden_de_insercion
+          El orden de los tags se mantiene en el resultado.
+
+      - test_combina_tags_de_multiples_referencias
+          Tags de dos referencias distintas se combinan en un solo listado.
+
+    [TestLimite]
+      - test_deduplica_keywords_repetidos
+          Un tag repetido en varias referencias aparece una sola vez.
+
+      - test_limita_resultado_a_seis_items
+          Aunque haya 7 tags, el resultado tiene maximo 6 elementos.
+
+      - test_referencia_sin_tags_no_aporta_keywords
+          Una referencia con lista de tags vacia no aporta elementos.
+
+    [TestError]
+      - test_lista_vacia_retorna_lista_vacia
+          Input [] retorna [].
+
+
+================================================================================
+  ====Frontend Tests====
+================================================================================
+
+--------------------------------------------------------------------------------
+  Archivo: src/utils/__tests__/validators.test.ts
+  Funciones probadas: isValidEmail | matchesPasswordStandard
+  IDs: PU-01, PU-02
+--------------------------------------------------------------------------------
+
+  [isValidEmail]  (PU-01)
+
+    casos normales
+      - retorna true para email valido                   → "user@example.com" → true
+      - retorna true para email con subdominio           → "user@mail.example.co" → true
+      - retorna true para email institucional            → "jose.martinez@universidad.edu.co" → true
+
+    casos limite
+      - retorna true ignorando espacios al inicio y final → "  user@example.com  " → true
+      - retorna false para email sin dominio despues del @ → "user@" → false
+      - retorna false para email sin TLD                 → "user@example" → false
+
+    caso erroneo
+      - retorna false para string vacio                  → "" → false
+      - retorna false para email sin @                   → "userexample.com" → false
+      - retorna false para email con espacio interno     → "user @example.com" → false
+
+  [matchesPasswordStandard]  (PU-02)
+
+    casos normales
+      - retorna true para contrasena que cumple todos los requisitos → "Secure1!" → true
+      - retorna true para contrasena con multiples especiales        → "P@$$w0rd!" → true
+      - retorna true para contrasena exactamente de 8 caracteres     → "Abcde1!x" → true
+
+    casos limite
+      - retorna true ignorando espacios al inicio y final  → "  Secure1!  " → true
+      - retorna false para contrasena de 7 caracteres      → "Abc1!xy" → false
+      - retorna false si falta solo el caracter especial   → "Secure123" → false
+
+    caso erroneo
+      - retorna false para string vacio                   → "" → false
+      - retorna false para contrasena solo minusculas     → "password1!" → false
+      - retorna false para contrasena solo mayusculas     → "PASSWORD1!" → false
+      - retorna false para contrasena sin digito          → "SecurePass!" → false
+
+
+--------------------------------------------------------------------------------
+  Archivo: src/utils/__tests__/formatters.test.ts
+  Funciones probadas: formatTimestamp | labelForProblemType
+  IDs: PU-18, PU-19
+--------------------------------------------------------------------------------
+
+  [formatTimestamp]  (PU-18)
+
+    casos normales
+      - retorna string no vacio para timestamp ISO valido
+      - produce salida diferente para timestamps distintos
+      - incluye digitos de hora y minuto en la salida (patron \d{1,2}[:\s.]\d{2})
+
+    casos limite
+      - maneja timestamps de inicio y fin de dia (00:00 != 23:59)
+      - produce salidas distintas para meses distintos
+
+    caso erroneo
+      - lanza RangeError para string vacio   → ""
+      - lanza RangeError para string no-fecha → "no-es-una-fecha"
+
+  [labelForProblemType]  (PU-19)
+
+    casos normales
+      - "derivative"     → "Derivada"
+      - "integral"       → "Integral"
+      - "limit"          → "Limite"
+      - "equation"       → "Ecuacion"
+      - "simplification" → "Simplificacion"
+
+    casos limite
+      - "unknown" → "No identificado"
+
+    caso erroneo
+      - null → "No identificado"
+
+
+--------------------------------------------------------------------------------
+  Archivo: src/pages/ReportsPage/__tests__/utils.test.ts
+  Funciones probadas: formatDateInput | formatPercentage | formatChange |
+                      initialsForName
+  IDs: PU-18 (complemento), PU-20, PU-21, PU-22
+--------------------------------------------------------------------------------
+
+  [formatDateInput]  (PU-18 complemento)
+
+    casos normales
+      - formatea fecha a YYYY-MM-DD                 → new Date("2024-05-15...") → "2024-05-15"
+      - retorna string de exactamente 10 caracteres
+
+    casos limite
+      - formatea correctamente el primer dia del anio → "2024-01-01"
+      - formatea correctamente el ultimo dia del anio → "2024-12-31"
+
+    caso erroneo
+      - lanza RangeError para fecha invalida         → new Date("invalid")
+
+  [formatPercentage]  (PU-20)
+
+    casos normales
+      - 0.75 → "75%"
+      - 1.0  → "100%"
+      - 0.5  → "50%"
+
+    casos limite
+      - 0     → "0%"
+      - 0.333 → "33%"  (redondeo)
+      - 1.5   → "150%"
+
+    caso erroneo
+      - -0.5 → "-50%"
+
+  [formatChange]  (PU-21)
+
+    casos normales
+      -  0.5  → "+50% vs tema anterior"
+      - -0.3  → "-30% vs tema anterior"
+      -  0.2  → contiene "vs tema anterior"
+
+    casos limite
+      - 0     → "+0% vs tema anterior"
+      - 0.333 → "+33% vs tema anterior"
+
+    caso erroneo
+      - null  → "Sin periodo previo"
+
+  [initialsForName]  (PU-22)
+
+    casos normales
+      - "Juan Perez"   → "JP"
+      - "ana garcia"   → "AG"  (mayusculas automaticas)
+      - "Carlos"       → "C"   (una sola palabra)
+
+    casos limite
+      - "Maria del Carmen Lopez" → "MD"  (maximo 2 iniciales)
+      - "  Juan   Perez  "       → "JP"  (espacios extra)
+
+    caso erroneo
+      - ""    → ""
+      - "   " → ""
+
+
+--------------------------------------------------------------------------------
+  Archivo: src/api/__tests__/client.test.ts
+  Funciones probadas: formatErrorDetail | buildQuery
+  IDs: PU-23, PU-24
+--------------------------------------------------------------------------------
+
+  [formatErrorDetail]  (PU-23)
+
+    casos normales
+      - retorna el string para mensaje de texto plano
+      - extrae msg de objeto de error de validacion FastAPI
+      - incluye la ruta (loc) en el mensaje
+      - aplana array de mensajes de error
+
+    casos limite
+      - deduplica mensajes identicos en array
+      - extrae campo "detail" de objeto anidado
+      - extrae campo "error" si no hay "detail"
+      - extrae campo "message" como ultimo recurso
+      - retorna msg sin prefijo de loc cuando loc esta ausente
+
+    caso erroneo
+      - retorna null para null
+      - retorna null para undefined
+      - retorna null para string vacio
+      - retorna null para string de solo espacios
+      - retorna null para array de strings vacios
+
+  [buildQuery]  (PU-24)
+
+    casos normales
+      - construye query string con un parametro      → {start:"2024-01-01"} → "?start=2024-01-01"
+      - incluye multiples parametros en la query
+      - retorna string que empieza con ?
+
+    casos limite
+      - omite parametros con valor undefined
+      - omite parametros con string vacio
+      - omite parametros con solo espacios           → {search:"   "} → ""
+
+    caso erroneo
+      - retorna string vacio para objeto vacio       → {} → ""
+      - retorna string vacio cuando todos son undefined
+
+
+================================================================================
+  FIN DEL DOCUMENTO
+================================================================================

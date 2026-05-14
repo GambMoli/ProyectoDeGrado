@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { useAuth } from "../../../context";
+import { isValidEmail, matchesPasswordStandard } from "../../../utils/validators";
 
 type AuthTab = "login" | "register";
 type Role = "student" | "teacher";
@@ -29,22 +30,6 @@ interface FormFieldErrors {
 
 const PASSWORD_STANDARD_MESSAGE =
   "La contrase\u00f1a debe tener al menos 8 caracteres, una may\u00fascula, una min\u00fascula, un n\u00famero y un car\u00e1cter especial.";
-
-function isValidEmail(value: string): boolean {
-  const normalized = value.trim();
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized);
-}
-
-function matchesPasswordStandard(value: string): boolean {
-  const normalized = value.trim();
-  return (
-    normalized.length >= 8 &&
-    /[A-Z]/.test(normalized) &&
-    /[a-z]/.test(normalized) &&
-    /\d/.test(normalized) &&
-    /[^A-Za-z0-9]/.test(normalized)
-  );
-}
 
 const initialLoginState: LoginFormState = {
   email: "",

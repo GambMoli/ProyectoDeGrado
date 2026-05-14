@@ -21,7 +21,7 @@ const baseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.repla
 const AUTH_TOKEN_STORAGE_KEY = "calc-tutor-auth-token";
 const AUTH_USER_STORAGE_KEY = "calc-tutor-auth-user";
 
-function formatErrorDetail(detail: unknown): string | null {
+export function formatErrorDetail(detail: unknown): string | null {
   if (!detail) {
     return null;
   }
@@ -179,7 +179,7 @@ export function getStoredAuthToken(): string | null {
   return localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
 }
 
-function buildQuery(params: Record<string, string | undefined>): string {
+export function buildQuery(params: Record<string, string | undefined>): string {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value && value.trim()) {

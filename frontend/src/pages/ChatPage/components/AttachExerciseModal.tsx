@@ -153,7 +153,8 @@ export function AttachExerciseModal({
               Imagen desde el equipo
             </Typography>
           </Box>
-
+          
+          {/*
           <Box
             component="button"
             onClick={() => !isAtLimit && cameraInputRef.current?.click()}
@@ -195,8 +196,9 @@ export function AttachExerciseModal({
               Captura directa
             </Typography>
           </Box>
+          */}
         </Box>
-
+          
         {pendingFiles.length > 0 ? (
           <Box sx={{ mb: 2, display: "flex", flexDirection: "column", gap: 1 }}>
             {pendingFiles.map((file, index) => (
