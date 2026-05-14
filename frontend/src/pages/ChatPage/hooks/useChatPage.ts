@@ -6,6 +6,7 @@ import {
   getConversations,
   sendChatMessage,
 } from "../../../api/client";
+import { latexToReadable } from "../../../components";
 import { useAuth } from "../../../context";
 import type { ConversationDetail, ConversationSummary, Message } from "../../../types/api";
 
@@ -111,7 +112,7 @@ export function useChatPage({ startNew = false } = {}) {
         const formatted = result.ocr_text
           .replace(/\$\$([^$]+)\$\$/g, (_match, expr: string) => `\\[\n${expr.trim()}\n\\]`)
           .trim();
-        setPendingOcrText(formatted);
+        setPendingOcrText(latexToReadable(formatted));
       } else {
         setError(result.error_message ?? "No se pudo extraer texto de la imagen.");
       }

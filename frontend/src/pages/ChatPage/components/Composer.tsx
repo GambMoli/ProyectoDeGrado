@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import CloseIcon from "@mui/icons-material/Close";
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import FunctionsIcon from "@mui/icons-material/Functions";
 import SendIcon from "@mui/icons-material/Send";
 import {
@@ -19,24 +20,24 @@ import {
 import { extractMathCandidateForPreview, MathContent, MathFormula, plainMathToLatex } from "../../../components";
 
 interface ComposerProps {
-  disabled: boolean;
-  isOcrLoading?: boolean;
-  openFormulaPanelTrigger?: string;
-  pendingText?: string | null;
-  selectedFile: File | null;
-  onClearFile: () => void;
-  onOpenAttach: () => void;
-  onPendingTextApplied?: () => void;
-  onSubmit: (message: string) => Promise<void>;
+  readonly disabled: boolean;
+  readonly isOcrLoading?: boolean;
+  readonly openFormulaPanelTrigger?: string;
+  readonly pendingText?: string | null;
+  readonly selectedFile: File | null;
+  readonly onClearFile: () => void;
+  readonly onOpenAttach: () => void;
+  readonly onPendingTextApplied?: () => void;
+  readonly onSubmit: (message: string) => Promise<void>;
 }
 
 const formulaSnippets = [
-  { label: "Integral", value: "∫ x^2 dx", preview: "\\int x^2\\,dx" },
-  { label: "Por partes", value: "∫ x e^x dx", preview: "\\int x e^x\\,dx" },
-  { label: "Derivada", value: "d/dx (x^3 + 2x)", preview: "\\frac{d}{dx}(x^3 + 2x)" },
-  { label: "Limite", value: "lim x->0 sin(x)/x", preview: "\\lim_{x \\to 0} \\sin(x)/x" },
+  { label: "Integral", value: "∫ x^2 dx", preview: String.raw`\int x^2\,dx` },
+  { label: "Por partes", value: "∫ x e^x dx", preview: String.raw`\int x e^x\,dx` },
+  { label: "Derivada", value: "d/dx (x^3 + 2x)", preview: String.raw`\frac{d}{dx}(x^3 + 2x)` },
+  { label: "Limite", value: "lim x->0 sin(x)/x", preview: String.raw`\lim_{x \to 0} \sin(x)/x` },
   { label: "Ecuacion", value: "x^2 + 3x = 10", preview: "x^2 + 3x = 10" },
-  { label: "Raiz", value: "sqrt(x^2 + 1)", preview: "\\sqrt{x^2 + 1}" },
+  { label: "Raiz", value: "sqrt(x^2 + 1)", preview: String.raw`\sqrt{x^2 + 1}` },
 ];
 
 export function Composer({
@@ -52,6 +53,7 @@ export function Composer({
 }: ComposerProps) {
   const [message, setMessage] = useState("");
   const [isFormulaPanelOpen, setIsFormulaPanelOpen] = useState(false);
+  const [isRenderingMode, setIsRenderingMode] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const isDisabled = disabled || Boolean(isOcrLoading);
@@ -70,6 +72,12 @@ export function Composer({
     }
   }, [pendingText]);
 
+  useEffect(() => {
+    if (!message) {
+      setIsRenderingMode(false);
+    }
+  }, [message]);
+
   async function handleSubmit() {
     if (isDisabled || (!message.trim() && !selectedFile)) {
       return;
@@ -77,6 +85,7 @@ export function Composer({
 
     await onSubmit(message.trim());
     setMessage("");
+    setIsRenderingMode(false);
     setIsFormulaPanelOpen(false);
   }
 
@@ -87,7 +96,21 @@ export function Composer({
     }
   }
 
+  function switchToEditMode() {
+    setIsRenderingMode(false);
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  }
+
   function insertFormulaTemplate(template: string) {
+    if (isRenderingMode) {
+      setIsRenderingMode(false);
+      setTimeout(() => doInsertFormulaTemplate(template), 0);
+      return;
+    }
+    doInsertFormulaTemplate(template);
+  }
+
+  function doInsertFormulaTemplate(template: string) {
     const textarea = textareaRef.current;
     if (!textarea) {
       return;
@@ -110,9 +133,29 @@ export function Composer({
   }
 
   const hasBlockMath = /\\\[[\s\S]*?\\\]/.test(message);
-  const previewCandidate = hasBlockMath ? null : extractMathCandidateForPreview(message);
+  const mathSignal = /[=^+\-/*()∫√π∂∑∏²³⁴⁵⁶⁷⁸⁹αβγδθλμσφω]|\\(?:int|frac|sqrt|sin|cos|tan|lim)/;
+  const messageLines = message.split("\n").map((l) => l.trim()).filter(Boolean);
+  const mathLines = messageLines.filter((l) => mathSignal.test(l));
+  const isMultiLineMath = mathLines.length > 1;
+  const previewCandidate = (hasBlockMath || isMultiLineMath) ? null : extractMathCandidateForPreview(message);
   const previewLatex = previewCandidate ? plainMathToLatex(previewCandidate) : null;
-  const showPreview = hasBlockMath || Boolean(previewLatex);
+  const showPreview = !isRenderingMode && (hasBlockMath || isMultiLineMath || Boolean(previewLatex));
+
+  function renderPreviewContent() {
+    if (isMultiLineMath) {
+      return (
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+          {mathLines.map((line) => (
+            <MathFormula key={line} expression={line} source="plain" displayMode />
+          ))}
+        </Box>
+      );
+    }
+    if (hasBlockMath) {
+      return <MathContent content={message} />;
+    }
+    return <MathFormula expression={previewLatex!} displayMode />;
+  }
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
@@ -216,11 +259,7 @@ export function Composer({
             Vista previa matematica
           </Typography>
           <Box sx={{ overflowX: "auto" }}>
-            {hasBlockMath ? (
-              <MathContent content={message} />
-            ) : (
-              <MathFormula expression={previewLatex!} displayMode />
-            )}
+            {renderPreviewContent()}
           </Box>
         </Paper>
       ) : null}
@@ -235,22 +274,56 @@ export function Composer({
           borderColor: "divider",
         }}
       >
-        <TextField
-          fullWidth
-          multiline
-          maxRows={6}
-          placeholder="Escribe tu consulta matematica aqui..."
-          value={message}
-          disabled={isDisabled}
-          onChange={(event) => setMessage(event.target.value)}
-          onKeyDown={handleKeyDown}
-          inputRef={textareaRef}
-          variant="standard"
-          InputProps={{
-            disableUnderline: true,
-            sx: { fontSize: "0.98rem", py: 0.5 },
-          }}
-        />
+        {isRenderingMode ? (
+          <Box
+            sx={{
+              flex: 1,
+              minHeight: 48,
+              cursor: "text",
+              position: "relative",
+              py: 0.5,
+              pr: 4,
+              overflowX: "auto",
+              "& .math-content": { fontSize: "0.98rem" },
+            }}
+            onClick={switchToEditMode}
+          >
+            <MathContent content={message} />
+            <Tooltip title="Editar">
+              <IconButton
+                size="small"
+                onClick={(e) => { e.stopPropagation(); switchToEditMode(); }}
+                sx={{
+                  position: "absolute",
+                  top: 0,
+                  right: 0,
+                  color: "text.disabled",
+                  p: 0.5,
+                  "&:hover": { color: "primary.main" },
+                }}
+              >
+                <EditOutlinedIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        ) : (
+          <TextField
+            fullWidth
+            multiline
+            maxRows={6}
+            placeholder="Escribe tu consulta matematica aqui..."
+            value={message}
+            disabled={isDisabled}
+            onChange={(event) => setMessage(event.target.value)}
+            onKeyDown={handleKeyDown}
+            inputRef={textareaRef}
+            variant="standard"
+            InputProps={{
+              disableUnderline: true,
+              sx: { fontSize: "0.98rem", py: 0.5 },
+            }}
+          />
+        )}
         <Tooltip title="Enviar mensaje">
           <span>
             <IconButton
