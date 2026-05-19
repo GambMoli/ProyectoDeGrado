@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -101,3 +102,78 @@ def test_scope_guard_still_rejects_off_topic_message_even_with_math_context() ->
     )
 
     assert result is False
+
+
+class FakeDirectReplyRepository:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, str]] = []
+
+    def create_message(self, db: object, **kwargs: object) -> SimpleNamespace:
+        kwargs.setdefault("error_message", None)
+        return SimpleNamespace(
+            id="assistant-message",
+            created_at=datetime.now(timezone.utc),
+            resolved_exercise=None,
+            submitted_exercise=None,
+            **kwargs,
+        )
+
+    def create_topic_metric_event(
+        self,
+        db: object,
+        *,
+        user_id: str,
+        conversation_id: str,
+        topic: str,
+        interaction_type: str,
+    ) -> None:
+        self.events.append((topic, interaction_type))
+
+    def touch_conversation(
+        self,
+        db: object,
+        conversation: SimpleNamespace,
+        *,
+        summary: str | None = None,
+        title_hint: str | None = None,
+        agent_state: dict | None = None,
+    ) -> None:
+        conversation.summary = summary
+        conversation.agent_state = agent_state or {}
+
+
+def test_direct_reply_records_question_topic_without_generated_exercise_event() -> None:
+    service = build_service()
+    repository = FakeDirectReplyRepository()
+    service.repository = repository  # type: ignore[assignment]
+    conversation = SimpleNamespace(
+        id="conversation-1",
+        user_id="student-1",
+        agent_state={"pending_practice": {"topic": "derivative"}},
+        title="Nueva conversacion",
+        summary=None,
+    )
+    user_message = SimpleNamespace(
+        id="user-message",
+        role="user",
+        content="No entendi, puedes hacer el paso a paso?",
+        source_type="text",
+        status="received",
+        error_message=None,
+        created_at=datetime.now(timezone.utc),
+        resolved_exercise=None,
+        submitted_exercise=None,
+    )
+
+    response = service._respond_direct_text(
+        db=object(),  # type: ignore[arg-type]
+        user_id="student-1",
+        conversation=conversation,  # type: ignore[arg-type]
+        user_message=user_message,  # type: ignore[arg-type]
+        assistant_text="Primero aplicamos la regla del producto.",
+        raw_input=user_message.content,
+        topic="derivative",
+    )
+
+    assert response.assistant_message.content == "Primero aplicamos la regla del producto."
+    assert repository.events == [("derivative", "question")]

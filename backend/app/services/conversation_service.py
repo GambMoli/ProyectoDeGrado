@@ -188,6 +188,7 @@ class ConversationService:
                         user_message=user_message,
                         assistant_text=orchestrated.reply,
                         raw_input=payload.message,
+                        topic=orchestrated.topic,
                     )
                     db.commit()
                     return response
@@ -421,6 +422,7 @@ class ConversationService:
         user_message: Message,
         assistant_text: str,
         raw_input: str,
+        topic: str | None = None,
     ) -> ChatResponse:
         assistant_message = self.repository.create_message(
             db,
@@ -430,18 +432,15 @@ class ConversationService:
             source_type=SourceType.TEXT.value,
             status=MessageStatus.SOLVED.value,
         )
-        report_topic = self._normalize_report_topic(generated.problem_type or generated.topic)
-        self._record_topic_event(
-            db=db,
-            conversation=conversation,
-            topic=report_topic,
-            interaction_type="question",
+        report_topic = self._infer_report_topic(
+            raw_input=raw_input,
+            candidate_topics=[topic],
         )
         self._record_topic_event(
             db=db,
             conversation=conversation,
             topic=report_topic,
-            interaction_type="exercise_generated",
+            interaction_type="question",
         )
         self.repository.touch_conversation(
             db,
