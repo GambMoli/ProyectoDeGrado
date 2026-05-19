@@ -141,55 +141,57 @@ export function StudentReportsSection({
                 </Typography>
               </Box>
             ) : (
-              <List disablePadding>
-                {students.map((student, index) => {
-                  const palette = avatarPalette[index % avatarPalette.length];
-                  const isSelected = student.user_id === selectedStudentId;
+              <Box sx={{ maxHeight: 600, overflowY: "auto", overflowX: "auto" }}>
+                <List disablePadding sx={{ minWidth: 480 }}>
+                  {students.map((student, index) => {
+                    const palette = avatarPalette[index % avatarPalette.length];
+                    const isSelected = student.user_id === selectedStudentId;
 
-                  return (
-                    <ListItem
-                      key={student.user_id}
-                      disableGutters
-                      sx={{
-                        px: 3,
-                        py: 1.75,
-                        display: "grid",
-                        gridTemplateColumns: "1.2fr 0.9fr 120px",
-                        borderBottom: "1px solid #EEF2F7",
-                        backgroundColor:"background.paper"
-                      }}
-                    >
-                      <Stack direction="row" spacing={1.75} alignItems="center">
-                        <Avatar
-                          sx={{
-                            width: 32,
-                            height: 32,
-                            bgcolor: palette.bg,
-                            color: palette.color,
-                            fontSize: 13,
-                            fontWeight: 800,
-                          }}
-                        >
-                          {initialsForName(student.display_name)}
-                        </Avatar>
-                        <Typography sx={{ fontSize: 14, fontWeight: 500, color: "text.primary" }}>
-                          {student.display_name}
+                    return (
+                      <ListItem
+                        key={student.user_id}
+                        disableGutters
+                        sx={{
+                          px: 3,
+                          py: 1.75,
+                          display: "grid",
+                          gridTemplateColumns: "1.2fr 0.9fr 120px",
+                          borderBottom: "1px solid #EEF2F7",
+                          backgroundColor:"background.paper"
+                        }}
+                      >
+                        <Stack direction="row" spacing={1.75} alignItems="center">
+                          <Avatar
+                            sx={{
+                              width: 32,
+                              height: 32,
+                              bgcolor: palette.bg,
+                              color: palette.color,
+                              fontSize: 13,
+                              fontWeight: 800,
+                            }}
+                          >
+                            {initialsForName(student.display_name)}
+                          </Avatar>
+                          <Typography sx={{ fontSize: 14, fontWeight: 500, color: "text.primary" }}>
+                            {student.display_name}
+                          </Typography>
+                        </Stack>
+                        <Typography sx={{ fontSize: 14, fontWeight: 500, color: "text.secondary", alignSelf: "center" }}>
+                          {student.email || "Sin correo registrado"}
                         </Typography>
-                      </Stack>
-                      <Typography sx={{ fontSize: 14, fontWeight: 500, color: "text.secondary", alignSelf: "center" }}>
-                        {student.email || "Sin correo registrado"}
-                      </Typography>
-                      <Box sx={{ display: "grid", placeItems: "center", backgroundColor:"background.paper" }}>
-                        <Checkbox
-                          checked={isSelected}
-                          onChange={() => onSelectStudent(student.user_id)}
-                          sx={{ color: "#CBD5E1", "&.Mui-checked": { color: "#1547A1" } }}
-                        />
-                      </Box>
-                    </ListItem>
-                  );
-                })}
-              </List>
+                        <Box sx={{ display: "grid", placeItems: "center", backgroundColor:"background.paper" }}>
+                          <Checkbox
+                            checked={isSelected}
+                            onChange={() => onSelectStudent(student.user_id)}
+                            sx={{ color: "#CBD5E1", "&.Mui-checked": { color: "#1547A1" } }}
+                          />
+                        </Box>
+                      </ListItem>
+                    );
+                  })}
+                </List>
+              </Box>
             )}
           </SectionCard>
         </Grid>
@@ -264,7 +266,7 @@ export function StudentReportsSection({
                 "&:hover": { bgcolor: "#1E40AF", boxShadow: "none" },
               }}
             >
-              Generar metricas
+              Generar métricas
             </Button>
           </SectionCard>
         </Grid>
@@ -299,7 +301,7 @@ export function StudentReportsSection({
         {!selectedStudent ? (
           <Box sx={{ py: 6, display: "grid", placeItems: "center" }}>
             <Typography sx={{ fontSize: 14, color: "text.secondary" }}>
-              Selecciona un estudiante para ver sus metricas.
+              Selecciona un estudiante para ver sus métricas.
             </Typography>
           </Box>
         ) : (
@@ -356,7 +358,7 @@ export function StudentReportsSection({
                 p: 3,
               }}
             >
-              <Typography sx={{ fontSize: 15, fontWeight: 500, color: "#1E293B", mb: 2.5 }}>
+              <Typography sx={{ fontSize: 15, fontWeight: 500, color: "text.secondary", mb: 2.5 }}>
                 Actividad por Semana
               </Typography>
 
@@ -371,7 +373,8 @@ export function StudentReportsSection({
                   </Typography>
                 </Box>
               ) : (
-                <Box sx={{ height: 220 }}>
+                <Box sx={{ overflowX: "auto" }}>
+                <Box sx={{ height: 220, minWidth: 420 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={weeklyChartData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                       <defs>
@@ -393,6 +396,7 @@ export function StudentReportsSection({
                       />
                     </AreaChart>
                   </ResponsiveContainer>
+                </Box>
                 </Box>
               )}
             </Box>

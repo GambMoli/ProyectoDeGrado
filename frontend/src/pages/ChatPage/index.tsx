@@ -127,7 +127,7 @@ export function ChatPage() {
             {isConversationLoading ? (
               <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", flexGrow: 1 }}>
                 <Typography variant="body2" sx={{ color: "text.secondary", fontWeight: 600 }}>
-                  Cargando conversacion...
+                  Cargando conversación...
                 </Typography>
               </Box>
             ) : (

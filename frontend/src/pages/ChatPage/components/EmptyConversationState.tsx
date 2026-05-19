@@ -32,7 +32,7 @@ export function EmptyConversationState() {
       >
         <Typography variant="body2" sx={{ fontSize: "0.95rem" }}>
           Hola. Soy tu asistente de <strong>Cubik IA</strong>. Estoy listo para ayudarte con
-          calculo, algebra, estadistica y otros ejercicios matematicos. Que problema resolvemos
+          cálculo, álgebra, estadística y otros ejercicios matemáticos. ¿Qué problema resolvemos
           hoy?
         </Typography>
       </Box>
