@@ -32,7 +32,7 @@ export function formatPercentage(value: number): string {
 
 export function formatChange(value: number | null): string {
   if (value === null) {
-    return "Sin periodo previo";
+    return "Sin período previo";
   }
   const sign = value >= 0 ? "+" : "";
   return `${sign}${Math.round(value * 100)}% vs tema anterior`;

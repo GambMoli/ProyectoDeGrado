@@ -35,9 +35,9 @@ const formulaSnippets = [
   { label: "Integral", value: "∫ x^2 dx", preview: String.raw`\int x^2\,dx` },
   { label: "Por partes", value: "∫ x e^x dx", preview: String.raw`\int x e^x\,dx` },
   { label: "Derivada", value: "d/dx (x^3 + 2x)", preview: String.raw`\frac{d}{dx}(x^3 + 2x)` },
-  { label: "Limite", value: "lim x->0 sin(x)/x", preview: String.raw`\lim_{x \to 0} \sin(x)/x` },
-  { label: "Ecuacion", value: "x^2 + 3x = 10", preview: "x^2 + 3x = 10" },
-  { label: "Raiz", value: "sqrt(x^2 + 1)", preview: String.raw`\sqrt{x^2 + 1}` },
+  { label: "Límite", value: "lim x->0 sin(x)/x", preview: String.raw`\lim_{x \to 0} \sin(x)/x` },
+  { label: "Ecuación", value: "x^2 + 3x = 10", preview: "x^2 + 3x = 10" },
+  { label: "Raíz", value: "sqrt(x^2 + 1)", preview: String.raw`\sqrt{x^2 + 1}` },
 ];
 
 export function Composer({
@@ -177,7 +177,7 @@ export function Composer({
       </Box>
 
       {isFormulaPanelOpen ? (
-        <Paper sx={{ p: 2.5, bgcolor: "background.default" }}>
+        <Paper sx={{ p: 2.5, bgcolor: "background.default", maxHeight: { xs: "45vh", md: "50vh" }, overflowY: "auto" }}>
           <Grid container spacing={1.5}>
             {formulaSnippets.map((snippet) => (
               <Grid item xs={12} sm={6} lg={4} key={snippet.label}>
@@ -256,7 +256,7 @@ export function Composer({
               letterSpacing: "0.08em",
             }}
           >
-            Vista previa matematica
+            Vista previa matemática
           </Typography>
           <Box sx={{ overflowX: "auto" }}>
             {renderPreviewContent()}
@@ -311,7 +311,7 @@ export function Composer({
             fullWidth
             multiline
             maxRows={6}
-            placeholder="Escribe tu consulta matematica aqui..."
+            placeholder="Escribe tu consulta matemática aquí..."
             value={message}
             disabled={isDisabled}
             onChange={(event) => setMessage(event.target.value)}

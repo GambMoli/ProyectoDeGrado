@@ -86,7 +86,7 @@ export function HistoryDrawer({
             </Box>
           ) : conversations.length === 0 ? (
             <Typography variant="body2" sx={{ color: "text.secondary", textAlign: "center", mt: 4, px: 2 }}>
-              Tus conversaciones apareceran aqui despues del primer mensaje.
+              Tus conversaciones aparecerán aquí después del primer mensaje.
             </Typography>
           ) : (
             <List disablePadding sx={{ display: "grid", gap: 1 }}>

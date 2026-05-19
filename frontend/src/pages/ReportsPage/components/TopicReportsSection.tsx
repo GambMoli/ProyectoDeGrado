@@ -112,7 +112,7 @@ export function TopicReportsSection({
                 boxShadow: "none",
               }}
             >
-              Exportar metricas
+              Exportar métricas
             </Button>
           </SectionCard>
         </Grid>
@@ -175,7 +175,7 @@ export function TopicReportsSection({
               </Grid>
               <Grid item xs={12} md={4}>
                 <TopicMetricCard
-                  title="Nivel de Interaccion"
+                  title="Nivel de Interacción"
                   value={
                     isTopicsLoading || !selectedTopicSummary
                       ? "..."
@@ -211,23 +211,25 @@ export function TopicReportsSection({
                   <CircularProgress size={28} sx={{ color: "#1D4ED8" }} />
                 </Box>
               ) : (
-                <Box sx={{ height: 190 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={topicTrendData} margin={{ top: 8, right: 4, left: -20, bottom: 0 }}>
-                      <CartesianGrid vertical={false} stroke={"#6084e8"} />
-                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#94A3B8", fontSize: 12 }} />
-                      <YAxis hide allowDecimals={false} />
-                      <Tooltip />
-                      <Line
-                        type="monotone"
-                        dataKey="preguntas"
-                        stroke="#3B82F6"
-                        strokeWidth={2.5}
-                        dot={{ r: 2.5, fill: "#3B82F6" }}
-                        activeDot={{ r: 4 }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
+                <Box sx={{ overflowX: "auto" }}>
+                  <Box sx={{ height: 190, minWidth: 420 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={topicTrendData} margin={{ top: 8, right: 4, left: -20, bottom: 0 }}>
+                        <CartesianGrid vertical={false} stroke={"#6084e8"} />
+                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#94A3B8", fontSize: 12 }} />
+                        <YAxis hide allowDecimals={false} />
+                        <Tooltip />
+                        <Line
+                          type="monotone"
+                          dataKey="preguntas"
+                          stroke="#3B82F6"
+                          strokeWidth={2.5}
+                          dot={{ r: 2.5, fill: "#3B82F6" }}
+                          activeDot={{ r: 4 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </Box>
                 </Box>
               )}
             </Box>

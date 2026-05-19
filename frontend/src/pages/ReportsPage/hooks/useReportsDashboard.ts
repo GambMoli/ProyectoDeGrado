@@ -123,7 +123,7 @@ export function useReportsDashboard() {
           setError(
             nextError instanceof Error
               ? nextError.message
-              : "No se pudieron cargar las metricas del estudiante.",
+              : "No se pudieron cargar las métricas del estudiante.",
           );
         }
       } finally {
@@ -165,7 +165,7 @@ export function useReportsDashboard() {
           setError(
             nextError instanceof Error
               ? nextError.message
-              : "No se pudieron cargar las metricas por tema.",
+              : "No se pudieron cargar las métricas por tema.",
           );
         }
       } finally {
